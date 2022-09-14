@@ -9,6 +9,11 @@ class NoMove {
     uint16_t data_;
 
   public:
+    NoMove(const NoMove &) = default;
+    NoMove(NoMove &&) = delete;
+    ~NoMove() = default;
+    NoMove & operator = (const NoMove &) = default;
+    NoMove & operator == (NoMove &&) = delete;
     NoMove(uint16_t v = 0) : data_(v){};
     uint16_t operator=(uint16_t v) { return data_ = v; }
     bool operator==(uint16_t v) { return data_ == v; }
@@ -18,7 +23,7 @@ class NoMove {
 int main() {
     int result = 0;
     constexpr std::uint8_t len = 128;
-    constexpr std::size_t circles = 1024 * 1024;
+    constexpr std::size_t circles = 1024;
     fifo::internal::FifoRaw<NoMove, std::uint8_t, len> buf;
     std::cout << "Test async push and pull\n";
     auto pusher = std::async([&buf]() {

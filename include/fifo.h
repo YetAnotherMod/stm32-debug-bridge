@@ -1,3 +1,6 @@
+#pragma once
+
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <utility>
@@ -5,32 +8,40 @@
 namespace fifo {
 
 namespace internal {
-template <typename DataType, typename SizeType, SizeType N> class FifoRaw {
-    static_assert(!std::numeric_limits<SizeType>::is_signed,
-                  "SizeType must be unsigned");
-    static_assert(N > 0, "N must be greater zero");
-    static_assert((N & (N - 1)) == 0, "N must be power of 2");
-
+template <typename DataType, typename SizeType, SizeType N>
+requires(std::unsigned_integral<SizeType> && (N > 0) &&
+         ((N & (N - 1)) == 0)) class FifoRaw {
   private:
-    volatile SizeType head_;
-    volatile SizeType tail_;
+    SizeType head_;
+    SizeType tail_;
     DataType data_[N];
 
   public:
     FifoRaw(void) : head_(0), tail_(0) {}
-    SizeType size(void) { return tail_ - head_; }
-    bool isEmpty(void) { return tail_ == head_; }
-    bool empty(void) { return isEmpty(); }
-    bool isFull(void) { return size() == N; }
-    void push(DataType v) {
-        SizeType t = tail_ % N;
-        data_[t] = std::move(v);
-        tail_++;
+    SizeType size(void) const { return tail_ - head_; }
+    bool isEmpty(void) const { return tail_ == head_; }
+    bool empty(void) const { return isEmpty(); }
+    bool isFull(void) const { return size() == N; }
+    void push(DataType v) requires(std::movable<DataType>) {
+        SizeType t = tail_;
+        data_[t % N] = std::move(v);
+        tail_ = t + 1;
     }
-    DataType pop(void) {
-        SizeType h = head_ % N;
-        auto x = std::move(data_[h]);
-        head_++;
+    void push(DataType v) requires(!std::movable<DataType>) {
+        SizeType t = tail_;
+        data_[t % N] = v;
+        tail_ = t + 1;
+    }
+    DataType pop(void) requires(std::movable<DataType>) {
+        SizeType h = head_;
+        auto x = std::move(data_[h % N]);
+        head_ = h + 1;
+        return x;
+    }
+    DataType pop(void) requires(!std::movable<DataType>) {
+        SizeType h = head_;
+        auto x = data_[h % N];
+        head_ = h + 1;
         return x;
     }
     bool pushSafe(const DataType &v) {
@@ -40,7 +51,7 @@ template <typename DataType, typename SizeType, SizeType N> class FifoRaw {
         push(v);
         return true;
     }
-    bool pushSafe(DataType &&v) {
+    bool pushSafe(DataType &&v) requires(std::movable<DataType>) {
         if (isFull()) {
             return false;
         }

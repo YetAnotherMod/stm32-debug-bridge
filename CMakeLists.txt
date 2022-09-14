@@ -25,7 +25,7 @@ set (STM32_LDSCRIPT ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templa
 add_compile_definitions(STM32F103xB HSE_VALUE=8000000U)
 add_compile_options(-mthumb -mcpu=cortex-m3)
 add_compile_options(-Wall -Wextra -Wpedantic)
-add_compile_options(-O2 -gdwarf-2 -std=c++17)
+add_compile_options(-O2 -gdwarf-2 -std=c++2a)
 
 add_link_options(-mthumb -mcpu=cortex-m3 -T${STM32_LDSCRIPT} --specs=nosys.specs --specs=nano.specs)
 if(FIRMWARE_ORIGIN)
