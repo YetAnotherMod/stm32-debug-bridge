@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stm32f1xx.h>
-// #include <utility>
+
 #include <tuple>
 
 #ifndef NDEBUG
@@ -234,7 +234,6 @@ template <Port port, uint8_t pin> bool Pin<port, pin>::bisy = false;
 
 template <Port port, uint8_t... pins> class Bulk {
   private:
-    // template <typename... T> struct array {T... data;};
     static const uint8_t ind[sizeof...(pins)];
     std::tuple<Pin<port, pins>...> pins_;
     template <size_t I = 0>

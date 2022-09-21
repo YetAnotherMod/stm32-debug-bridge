@@ -1,4 +1,5 @@
 
+#include <usb_std.h>
 #include <gpio.h>
 
 int main() {
