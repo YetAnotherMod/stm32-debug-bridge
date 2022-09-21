@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+
 #include <stm32f1xx.h>
 
 namespace usb {
@@ -138,6 +139,16 @@ struct Iad : Base {
           bFunctionClass(bFunctionClass), bFunctionSubClass(bFunctionSubClass),
           bFunctionProtocol(bFunctionProtocol), iFunction(iFunction) {}
 } __attribute__((packed));
+
+struct Interface : Base {
+    uint8_t bInterfaceNumber;
+    uint8_t bAlternateSetting;
+    uint8_t bNumEndpoints;
+    uint8_t bInterfaceClass;
+    uint8_t bInterfaceSubClass;
+    uint8_t bInterfaceProtocol;
+    uint8_t iInterface;
+};
 struct Endpoint : Base {
     static constexpr uint8_t directionOut = 0x00;
     static constexpr uint8_t directionIn = 0x80;
@@ -252,7 +263,7 @@ constexpr size_t smallBlockSizeLimit =
 
 } // namespace bTable
 
-volatile uint16_t &epRegs(uint16_t num) { return (&USB->EP0R)[num * 2]; }
+constexpr volatile uint16_t &epRegs(uint16_t num) { return (&USB->EP0R)[num * 2]; }
 
 using endpointCallback = void (*)(unsigned int ep_num);
 
