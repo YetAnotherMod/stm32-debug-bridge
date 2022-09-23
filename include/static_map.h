@@ -25,14 +25,13 @@ class StaticMap {
 
     ValueType &operator[](const KeyType &k) {
         auto ind = find(k);
-        if (ind == nullptr)
-        {
-            ind = insert({k,ValueType()});
+        if (ind == nullptr) {
+            ind = insert({k, ValueType()});
         }
         return ind->second;
     }
 
-    storageType * insert(storageType v) {
+    storageType *insert(storageType v) {
         if (size_ >= Capacity) {
             return nullptr;
         }
@@ -61,6 +60,15 @@ class StaticMap {
 
     std::size_t size() const { return size_; }
     std::size_t capacity() const { return Capacity; }
+
+    storageType *find(const KeyType &k) {
+        std::size_t hash = hash_(k) % TableSize;
+        listElem *p = hashTable_[hash];
+        while ((p != nullptr) && (p->v->first != k)) {
+            p = p->next;
+        }
+        return p==nullptr?nullptr:p->v;
+    }
 
     const storageType *find(const KeyType &k) const {
         std::size_t hash = hash_(k) % TableSize;
