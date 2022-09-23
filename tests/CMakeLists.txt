@@ -11,13 +11,13 @@ link_libraries(pthread)
 
 add_executable(fifo fifo.cpp)
 add_executable(fifo2 fifo2.cpp)
+add_executable(static_map static_map.cpp)
 
 include(CTest)
 
 add_test(fifo fifo)
 add_test(fifo2 fifo2)
-
-target_compile_options(fifo2 PRIVATE -O0)
+add_test(static_map static_map)
 
 if(NOT REPORT_PATH)
     set(REPORT_PATH ${PROJECT_BINARY_DIR})
