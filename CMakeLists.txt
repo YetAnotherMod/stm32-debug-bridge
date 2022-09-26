@@ -35,6 +35,7 @@ endif(FIRMWARE_ORIGIN)
 
 add_executable(firmware.elf src/main.cpp
     src/usb_descriptors.cpp
+    src/usb.cpp
     ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/gcc/startup_stm32f103xb.s
     ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/system_stm32f1xx.c
 )

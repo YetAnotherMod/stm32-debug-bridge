@@ -24,6 +24,73 @@ constexpr std::uint8_t networkConnection = 0x08;
 constexpr std::uint8_t default_ = lineCoding;
 }; // namespace acmCapability
 
+namespace serialState {
+constexpr std::uint16_t dcd = 0x01;
+constexpr std::uint16_t dsr = 0x02;
+constexpr std::uint16_t ri = 0x08;
+constexpr std::uint16_t parityError = 0x20;
+constexpr std::uint16_t overrun = 0x40;
+} // namespace serialState
+
+enum class CharFormat { stopBit1, stopBit1p5, stopBit2, last };
+
+enum class ParityType { none, odd, even, mark, space, last };
+
+enum class DataBits {
+    bits5 = 5,
+    bits6 = 6,
+    bits7 = 7,
+    bits8 = 8,
+    bit16 = 16,
+};
+
+namespace lineState {
+constexpr std::uint16_t dtr = 0x01;
+constexpr std::uint16_t rts = 0x02;
+} // namespace lineState
+
+enum class Request : std::uint8_t {
+    send_encapsulated_command = 0x00,
+    get_encapsulated_response = 0x01,
+    set_comm_feature = 0x02,
+    get_comm_feature = 0x03,
+    clear_comm_feature = 0x04,
+    set_line_coding = 0x20,
+    get_line_coding = 0x21,
+    set_control_line_state = 0x22,
+    send_break = 0x23,
+};
+
+struct Notification {
+    std::uint8_t bmRequestType;
+    std::uint8_t bNotificationType;
+    std::uint16_t wValue;
+    std::uint16_t wIndex;
+    std::uint16_t wLength;
+    std::uint16_t state;
+} __attribute__((packed));
+
+static_assert(sizeof(Notification) == 10);
+static_assert(alignof(Notification) == 1);
+
+enum class pin {
+    rx,
+    tx,
+    rts,
+    cts,
+    dsr,
+    dtr,
+    dcd,
+    ri,
+    txa,
+    unknow,
+    last = unknow
+};
+
+constexpr std::uint8_t numPorts = 3;
+constexpr std::size_t bufSize = 0x400;
+constexpr std::size_t linesPollingInterval = 20;
+enum class serialInd { uart = 0, shell = 1, jtag = 2 };
 namespace descriptor {
 
 enum class Subtype : std::uint8_t {
@@ -35,10 +102,14 @@ enum class Subtype : std::uint8_t {
 };
 
 using ::usb::descriptor::Base;
+using ::usb::descriptor::Type;
 
 struct Header : Base {
     Subtype bDescriptorSubType;
     std::uint16_t bcdCDC;
+    constexpr Header()
+        : Base(sizeof(*this), Type::cs_interface),
+          bDescriptorSubType(Subtype::header), bcdCDC(bcdVersion(1, 1, 0)) {}
 } __attribute__((packed));
 
 static_assert(sizeof(Header) == 5);
@@ -48,6 +119,12 @@ struct Union : Base {
     Subtype bDescriptorSubType;
     std::uint8_t bMasterInterface0;
     std::uint8_t bSlaveInterface0;
+    constexpr Union(std::uint8_t bMasterInterface0,
+                    std::uint8_t bSlaveInterface0)
+        : Base(sizeof(*this), Type::cs_interface),
+          bDescriptorSubType(Subtype::union_),
+          bMasterInterface0(bMasterInterface0),
+          bSlaveInterface0(bSlaveInterface0) {}
 } __attribute__((packed));
 
 static_assert(sizeof(Union) == 5);
@@ -57,18 +134,25 @@ struct CallMgmt : Base {
     Subtype bDescriptorSubType;
     std::uint8_t bmCapabilities;
     std::uint8_t bDataInterface;
+    constexpr CallMgmt(std::uint8_t bmCapabilities, std::uint8_t bDataInterface)
+        : Base(sizeof(*this), Type::cs_interface),
+          bDescriptorSubType(Subtype::call_management),
+          bmCapabilities(bmCapabilities), bDataInterface(bDataInterface) {}
 } __attribute__((packed));
 
 static_assert(sizeof(CallMgmt) == 5);
 static_assert(alignof(CallMgmt) == 1);
 
-struct CdcAcm : Base {
+struct Acm : Base {
     Subtype bDescriptorSubType;
     std::uint8_t bmCapabilities;
+    constexpr Acm(std::uint8_t bmCapabilities)
+        : Base(sizeof(*this), Type::cs_interface),
+          bDescriptorSubType(Subtype::acm), bmCapabilities(bmCapabilities) {}
 } __attribute__((packed));
 
-static_assert(sizeof(CdcAcm) == 4);
-static_assert(alignof(CdcAcm) == 1);
+static_assert(sizeof(Acm) == 4);
+static_assert(alignof(Acm) == 1);
 
 } // namespace descriptor
 } // namespace cdc

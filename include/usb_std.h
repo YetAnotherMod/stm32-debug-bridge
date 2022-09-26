@@ -99,6 +99,15 @@ struct Device : Base {
 } __attribute__((packed));
 static_assert(sizeof(Device) == 18, "incorrect size");
 static_assert(alignof(Device) <= 2, "incorrect align");
+
+constexpr uint8_t operator"" _ma(unsigned long long int v) {
+    return (v >= 500) ? static_cast<uint8_t>(250) : static_cast<uint8_t>(v / 2);
+}
+
+static_assert(100_ma == 50);
+static_assert(500_ma == 250);
+static_assert(1000_ma == 250);
+
 struct Configuration : Base {
     static constexpr std::uint8_t bmAttrRemoteWakeup = 0x20;
     static constexpr std::uint8_t bmAttrSelfPowered = 0x40;
@@ -144,11 +153,22 @@ struct Interface : Base {
     uint8_t bInterfaceNumber;
     uint8_t bAlternateSetting;
     uint8_t bNumEndpoints;
-    uint8_t bInterfaceClass;
+    Device::Class bInterfaceClass;
     uint8_t bInterfaceSubClass;
     uint8_t bInterfaceProtocol;
     uint8_t iInterface;
-};
+    constexpr Interface(uint8_t bInterfaceNumber, uint8_t bAlternateSetting,
+                        uint8_t bNumEndpoints, Device::Class bInterfaceClass,
+                        uint8_t bInterfaceSubClass, uint8_t bInterfaceProtocol,
+                        uint8_t iInterface)
+        : Base(sizeof(*this), Type::interface),
+
+          bInterfaceNumber(bInterfaceNumber),
+          bAlternateSetting(bAlternateSetting), bNumEndpoints(bNumEndpoints),
+          bInterfaceClass(bInterfaceClass),
+          bInterfaceSubClass(bInterfaceSubClass),
+          bInterfaceProtocol(bInterfaceProtocol), iInterface(iInterface) {}
+} __attribute__((packed));
 struct Endpoint : Base {
     static constexpr uint8_t directionOut = 0x00;
     static constexpr uint8_t directionIn = 0x80;
@@ -263,12 +283,14 @@ constexpr size_t smallBlockSizeLimit =
 
 } // namespace bTable
 
-constexpr volatile uint16_t &epRegs(uint16_t num) { return (&USB->EP0R)[num * 2]; }
+constexpr volatile uint16_t &epRegs(uint16_t num) {
+    return (&USB->EP0R)[num * 2];
+}
 
-using endpointCallback = void (*)(unsigned int ep_num);
+using endpointCallback = void (*)();
 
 struct Endpoint {
-    uint32_t type;
+    usb::descriptor::Endpoint::EpType type;
     uint8_t rxSize;
     uint8_t txSize;
     endpointCallback rxHandler;
@@ -278,16 +300,14 @@ struct Endpoint {
 
 } // namespace io
 
-enum class status{
-    ack = 0x00,
-    nak = 0x01,
-    fail = 0x02
-};
+enum class status { ack = 0x00, nak = 0x01, fail = 0x02 };
 
 enum class deviceState {
-    usb_device_state_reset          = 0x00,
-    usb_device_state_address_set    = 0x01,
-    usb_device_state_configured     = 0x02
+    usb_device_state_reset = 0x00,
+    usb_device_state_address_set = 0x01,
+    usb_device_state_configured = 0x02
 };
+
+enum class LanguageCode : char16_t { en_US = 0x0409 };
 
 } // namespace usb

@@ -67,7 +67,7 @@ class StaticMap {
         while ((p != nullptr) && (p->v->first != k)) {
             p = p->next;
         }
-        return p==nullptr?nullptr:p->v;
+        return p == nullptr ? nullptr : p->v;
     }
 
     const storageType *find(const KeyType &k) const {
