@@ -234,7 +234,7 @@ template <Port port, uint8_t pin> bool Pin<port, pin>::bisy = false;
 
 template <Port port, uint8_t... pins> class Bulk {
   private:
-    static const uint8_t ind[sizeof...(pins)];
+    static constexpr uint8_t ind[sizeof...(pins)] = {pins...};
     std::tuple<Pin<port, pins>...> pins_;
     template <size_t I = 0>
     typename std::enable_if<I == sizeof...(pins), uint32_t>::type
@@ -265,8 +265,5 @@ template <Port port, uint8_t... pins> class Bulk {
     template <uint8_t I> void write(bool v) { std::get<I>(pins_).write(v); }
     template <uint8_t I> bool read() { return std::get<I>(pins_).read(); }
 };
-
-template <Port port, uint8_t... pins>
-const uint8_t Bulk<port, pins...>::ind[sizeof...(pins)] = {pins...};
 
 } // namespace gpio

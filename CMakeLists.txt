@@ -23,7 +23,7 @@ include_directories(include
 set (STM32_LDSCRIPT ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/gcc/linker/STM32F103XB_FLASH.ld)
 
 add_compile_definitions(STM32F103xB HSE_VALUE=8000000U)
-add_compile_options(-mthumb -mcpu=cortex-m3)
+add_compile_options(-mthumb -mcpu=cortex-m3 -fno-pic)
 add_compile_options(-Wall -Wextra)
 add_compile_options(-O2 -gdwarf-2)
 set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -std=c++2a)
@@ -36,8 +36,8 @@ endif(FIRMWARE_ORIGIN)
 add_executable(firmware.elf src/main.cpp
     src/usb_descriptors.cpp
     src/usb.cpp
-    ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/gcc/startup_stm32f103xb.s
     ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/system_stm32f1xx.c
+    src/startup.cpp
 )
 
 add_custom_command(TARGET firmware.elf POST_BUILD
