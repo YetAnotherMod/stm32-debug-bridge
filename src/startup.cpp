@@ -1,12 +1,12 @@
 
 #include <cstdint>
 
-extern "C" void __attribute__((weak)) Default_Handler() {
+extern "C" void __attribute__((weak)) __terminate() {
     while (1)
         ;
-}
+};
 
-using CallbackType = void (*)();
+extern "C" void Default_Handler() { __terminate(); }
 
 extern "C" void Reset_Handler();
 extern "C" void NMI_Handler() __attribute__((weak, alias("Default_Handler")));
@@ -112,9 +112,9 @@ extern "C" void RTC_Alarm_IRQHandler()
 extern "C" void USBWakeUp_IRQHandler()
     __attribute__((weak, alias("Default_Handler")));
 extern "C" void BootRAM() __attribute__((weak, alias("Default_Handler")));
-extern "C" void ret() __attribute__((weak, alias("Default_Handler")));
 
 struct IsrVectors {
+    using CallbackType = void (*)();
     std::uint32_t *estack_;
 
     CallbackType Reset_Handler_;
@@ -249,6 +249,14 @@ extern "C" int SystemInit();
 extern "C" void __libc_init_array();
 extern "C" void __libc_fini_array();
 
+class startup {
+  private:
+    /* data */
+  public:
+    startup(/* args */){ __libc_init_array(); }
+    ~startup(){ __libc_fini_array(); }
+};
+
 extern "C" void Reset_Handler() {
 
     {
@@ -269,9 +277,12 @@ extern "C" void Reset_Handler() {
             *p++ = 0;
         }
     }
-    SystemInit();
-    __libc_init_array();
-    main();
-    __libc_fini_array();
-    ret();
+    try {
+        SystemInit();
+        startup libcHolder;
+        main();
+    } catch (...) {
+        ;
+    }
+    __terminate();
 }

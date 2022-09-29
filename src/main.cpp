@@ -1,6 +1,8 @@
 
+#include <stm32f1xx.h>
+
 #include <gpio.h>
-#include <usb_std.h>
+#include <usb.h>
 
 gpio::Pin<gpio::Port::c, 13> led;
 
@@ -42,18 +44,28 @@ void ClockInit() {
     RCC->CR = reservedBitsCr | RCC_CR_HSION | RCC_CR_HSEON | RCC_CR_PLLON;
     while ((RCC->CR & RCC_CR_PLLRDY_Msk) != 0)
         ;
+    SystemCoreClockUpdate();
 }
 
-// void Default_Handler() {
-//     led.writeLow();
-// }
+extern "C" void __terminate() {
+    led.writeLow();
+#ifdef NDEBUG
+    SCB->AIRCR = (0x5FA<<SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk;
+#endif
+    while (1)
+        ;
+}
 
 int main() {
     ClockInit();
     led.clockOn();
+    led.writeHigh();
     led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
-    led.writeLow();
-    while (1)
+    usb::init();
+    throw std::bad_exception();
+    while (1) {
         ;
+    }
+
     return 0;
 }

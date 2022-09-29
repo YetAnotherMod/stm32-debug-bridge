@@ -14,7 +14,7 @@ const DeviceConfiguration deviceConfig;
 
 static const String<static_cast<char16_t>(LanguageCode::en_US)> lang;
 static const auto manufacturer = u"RC Module"_sd;
-static const auto product = u"META (ModulE jTag Adapter)"_sd;
+static const auto product = u"DJM (Debugger Jtag Module)"_sd;
 static const auto serial = u"NO SERIAL"_sd;
 static const auto uartInterfaceName = u"uart"_sd;
 static const auto shellInterfaceName = u"shell"_sd;

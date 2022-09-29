@@ -2,6 +2,7 @@
 
 #include <usb_std.h>
 
+namespace usb{
 void controlRxHandler();
 void controlTxHandler();
 void controlSetupHandler();
@@ -17,3 +18,4 @@ void shellInterruptHandler();
 void jtagRxHandler();
 void jtagTxHandler();
 void jtagInterruptHandler();
+}

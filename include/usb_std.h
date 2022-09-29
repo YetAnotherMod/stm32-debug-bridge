@@ -257,8 +257,6 @@ using pbAlignedWord = std::uint16_t __attribute__((aligned(4)));
 static_assert(sizeof(pbAlignedWord) == 2);
 static_assert(alignof(pbAlignedWord) == 4);
 
-namespace bTable {
-
 struct bTableEntity {
     pbAlignedWord txOffset;
     pbAlignedWord txCount;
@@ -271,17 +269,22 @@ static_assert(alignof(bTableEntity) == 4);
 
 struct pBufferData {
     pbAlignedWord data;
+    uint16_t &operator = (uint16_t v){
+        return data = v;
+    }
+    operator uint16_t (){
+        return data;
+    }
 };
 
 static_assert(sizeof(pBufferData) == 4);
+static_assert(sizeof(pBufferData[4]) == 16);
 static_assert(alignof(pBufferData) == 4);
 
 constexpr size_t smallBlockSize = 2;
 constexpr size_t largeBlockSize = 32;
 constexpr size_t smallBlockSizeLimit =
     ((USB_COUNT0_RX_NUM_BLOCK_Msk >> USB_COUNT0_RX_NUM_BLOCK_Pos) << 1);
-
-} // namespace bTable
 
 constexpr volatile uint16_t &epRegs(uint16_t num) {
     return (&USB->EP0R)[num * 2];
