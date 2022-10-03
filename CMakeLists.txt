@@ -36,8 +36,9 @@ endif(FIRMWARE_ORIGIN)
 add_executable(firmware.elf src/main.cpp
     src/usb_descriptors.cpp
     src/usb.cpp
-    ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/system_stm32f1xx.c
     src/startup.cpp
+    src/global_resources.cpp
+    ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templates/system_stm32f1xx.c
 )
 
 add_custom_command(TARGET firmware.elf POST_BUILD

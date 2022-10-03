@@ -3,10 +3,9 @@
 
 #include <gpio.h>
 #include <usb.h>
+#include <global_resources.h>
 
-gpio::Pin<gpio::Port::c, 13> led;
-
-void ClockInit() {
+void ClockInit(void) {
     uint32_t reservedBitsCr =
         RCC->CR & ~(RCC_CR_PLLRDY_Msk | RCC_CR_PLLON_Msk | RCC_CR_CSSON_Msk |
                     RCC_CR_HSEBYP_Msk | RCC_CR_HSERDY_Msk | RCC_CR_HSEON_Msk |
@@ -56,11 +55,14 @@ extern "C" void __terminate() {
         ;
 }
 
-int main() {
-    ClockInit();
+void PortsInit(void){
     led.clockOn();
     led.writeHigh();
     led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+}
+
+int main() {
+    ClockInit();
     usb::init();
     throw std::bad_exception();
     while (1) {

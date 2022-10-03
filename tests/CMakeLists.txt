@@ -5,7 +5,7 @@ project (tests CXX)
 include_directories(../include)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Werror)
-add_compile_options(-O0 -std=c++2a --coverage)
+add_compile_options(-O0 -std=c++2a --coverage -gdwarf-2)
 add_link_options(--coverage)
 link_libraries(pthread)
 
@@ -24,8 +24,7 @@ if(NOT REPORT_PATH)
 endif(NOT REPORT_PATH)
 
 add_custom_target(coverage
-    COMMAND find "'('" -name *.cpp.gcno -or  -name *.cpp.gcda "')'" -exec gcov "{}" "+"
-    COMMAND lcov -o tests-raw.info -t "tests" -c -d . --rc lcov_branch_coverage=1
-    COMMAND lcov -o tests.info -r tests-raw.info '/usr/include/*' --rc lcov_branch_coverage=1
-    COMMAND genhtml -o ${REPORT_PATH}/coverage_report tests.info --rc lcov_branch_coverage=1
+    COMMAND find "'('" -name *.cpp.gcno "')'" -exec gcov "{}" "+" > /dev/null
+    COMMAND lcov -q -o tests.info -t "tests" -c -d . --rc lcov_branch_coverage=1 --exclude '/usr/include/*'
+    COMMAND genhtml -q -o ${REPORT_PATH}/coverage_report tests.info --rc lcov_branch_coverage=1
 )

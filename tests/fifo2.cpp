@@ -12,8 +12,8 @@ class NoMove {
     NoMove(const NoMove &) = default;
     NoMove(NoMove &&) = delete;
     ~NoMove() = default;
-    NoMove & operator = (const NoMove &) = default;
-    NoMove & operator == (NoMove &&) = delete;
+    NoMove &operator=(const NoMove &) = default;
+    NoMove &operator=(NoMove &&) = delete;
     NoMove(uint16_t v = 0) : data_(v){};
     uint16_t operator=(uint16_t v) { return data_ = v; }
     bool operator==(uint16_t v) { return data_ == v; }
@@ -25,25 +25,63 @@ int main() {
     constexpr std::uint8_t len = 128;
     constexpr std::size_t circles = 1024;
     fifo::internal::FifoRaw<NoMove, std::uint8_t, len> buf;
-    std::cout << "Test async push and pull\n";
-    auto pusher = std::async([&buf]() {
-        std::size_t i = 0;
-        while (i < len * circles) {
-            NoMove x = i;
-            if (buf.pushSafe(x)) {
-                i++;
+    {
+        std::cout << "Test async push and pull\n";
+        auto pusher = std::async([&buf]() {
+            std::size_t i = 0;
+            while (i < len * circles) {
+                NoMove x = i;
+                if (buf.pushSafe(x)) {
+                    i++;
+                }
+            }
+        });
+
+        for (std::size_t i = 0; i < len * circles; ++i) {
+            auto [x, res] = buf.popSafe();
+            while (!res) {
+                auto [x_, res_] = buf.popSafe();
+                x = x_;
+                res = res_;
+            }
+            if (static_cast<uint16_t>(i) != x) {
+                std::cout << "Iteration " << i << " bad data: " << x << "\n";
+                result = 1;
             }
         }
-    });
+    }
+    {
+        std::cout << "Test async write and read\n";
+        auto pusher = std::async([&buf]() {
+            std::size_t i = 0;
+            while (i < len * circles) {
+                NoMove x[len];
+                for (size_t j = 0; j < len; ++j) {
+                    x[j] = i + j;
+                }
+                i += buf.write(
+                    x, static_cast<std::uint8_t>(
+                           std::min<std::size_t>(len, len * circles - i)));
+            }
+        });
 
-    for (std::size_t i = 0; i < len * circles; ++i) {
-        while (buf.isEmpty())
-            ;
-        uint16_t x = buf.pop();
-        if (static_cast<uint16_t>(i) != x) {
-            std::cout << "Iteration " << i << " bad data: " << x << "\n";
-            result = 1;
+        std::size_t i = 0;
+
+        while (i < len * circles) {
+            NoMove x[len];
+            std::size_t readCount =
+                buf.read(x, static_cast<std::uint8_t>(
+                                std::min<std::size_t>(len, len * circles - i)));
+            for (std::size_t j = 0; j < readCount; ++j) {
+                if (static_cast<uint16_t>(i + j) != x[j]) {
+                    std::cout << "Iteration " << i << ":" << j
+                              << " bad data: " << x[j] << "\n";
+                    result = 1;
+                }
+            }
+            i += readCount;
         }
     }
+
     return result;
 }

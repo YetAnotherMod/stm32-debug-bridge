@@ -200,8 +200,8 @@ template <Port port, uint8_t pin> class Pin {
         }
     }
     void operator=(bool v) { write(v); }
-    static void clockOn() { RCC->APB2ENR |= getClockMsk(); }
-    static void clockOff() { RCC->APB2ENR &= ~getClockMsk(); }
+    static void clockOn() { RCC->APB2ENR = RCC->APB2ENR | getClockMsk(); }
+    static void clockOff() { RCC->APB2ENR = RCC->APB2ENR & ~getClockMsk(); }
     void toggle() { write(!read()); }
     Pin() {
 #ifndef NDEBUG
