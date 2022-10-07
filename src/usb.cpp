@@ -2,21 +2,91 @@
 #include <usb.h>
 
 #include <fifo.h>
-#include <gpio.h>
 #include <global_resources.h>
+#include <gpio.h>
 
 #include <algorithm>
 
 namespace usb {
 
+struct DeviceState {
+    enum class State { reset = 0x00, addressSet = 0x01, configured = 0x02 };
+    State state;
+    uint8_t address;
+    uint8_t configuration;
+};
+static DeviceState deviceState;
+
+struct ControlState {
+    enum class State { idle, rx, tx, txZlp, txLast, statusIn, statusOut };
+    State state;
+    Setup setup;
+    uint8_t *currentPayload;
+    uint16_t payloadLeft;
+};
+
+static ControlState controlState;
+
+static inline void endpointSetStall(descriptor::EndpointIndex epNum,
+                                    descriptor::Endpoint::Direction dir,
+                                    bool stall) {
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto epReg_ = epReg;
+    if ((epReg_ & USB_EP_T_FIELD) != USB_EP_ISOCHRONOUS) {
+        if (dir == descriptor::Endpoint::Direction::in) {
+            if ((epReg_ & USB_EPTX_STAT_Msk) != USB_EP_TX_DIS) {
+                if (stall) {
+                    epReg = ((epReg_ ^ USB_EP_TX_STALL) &
+                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
+                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                } else {
+                    epReg = ((epReg_ ^ USB_EP_TX_NAK) &
+                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk |
+                              USB_EP_DTOG_TX)) |
+                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                }
+            }
+        } else {
+            if ((epReg_ & USB_EPRX_STAT_Msk) != USB_EP_RX_DIS) {
+                if (stall) {
+                    epReg = ((epReg_ ^ USB_EP_RX_STALL) &
+                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
+                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                } else {
+                    // TODO: разобраться какого чёрта тут TX
+                    epReg = ((epReg_ ^ USB_EP_TX_VALID) &
+                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk |
+                              USB_EP_DTOG_RX)) |
+                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                }
+            }
+        }
+    }
+}
+static inline bool endpointGetStall(descriptor::EndpointIndex epNum,
+                                    descriptor::Endpoint::Direction dir) {
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    if (dir == descriptor::Endpoint::Direction::in) {
+        return (epReg & USB_EPTX_STAT_Msk) == USB_EP_TX_STALL;
+    }
+    return (epReg & USB_EPRX_STAT_Msk) == USB_EP_RX_STALL;
+}
 
 static volatile io::bTableEntity *const bTable =
     reinterpret_cast<io::bTableEntity *>(static_cast<uintptr_t>(USB_PMAADDR));
 
+static inline const io::pBufferData *rxBuf(std::uint8_t epNum) {
+    return reinterpret_cast<io::pBufferData *>(
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].rxOffset * 2));
+}
+static inline io::pBufferData *txBuf(std::uint8_t epNum) {
+    return reinterpret_cast<io::pBufferData *>(
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].txOffset * 2));
+}
+
 static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
-    const io::pBufferData *epBuf = reinterpret_cast<const io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum_].rxOffset * 2));
+    const io::pBufferData *epBuf = rxBuf(epNum_);
     const uint16_t rxCount = bTable[epNum_].rxCount;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
     uint16_t *bufP = reinterpret_cast<uint16_t *>(buf);
@@ -40,8 +110,7 @@ static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
 static size_t write(descriptor::EndpointIndex epNum, const void *buf,
                     size_t count) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
-    io::pBufferData *epBuf = reinterpret_cast<io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum_].txOffset * 2));
+    io::pBufferData *epBuf = txBuf(epNum_);
     const uint16_t *bufP = reinterpret_cast<const uint16_t *>(buf);
     const size_t txSize = descriptor::endpoints[epNum_].txSize;
     if (count > txSize) {
@@ -57,11 +126,147 @@ static size_t write(descriptor::EndpointIndex epNum, const void *buf,
     return count;
 }
 
+size_t readToFifo(descriptor::EndpointIndex epNum,
+                  fifo::Fifo<uint8_t, global::cdcFifoLenRx> data) {
+    const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
+    const io::pBufferData *epBuf = rxBuf(epNum_);
+    const uint16_t rxCount = bTable[epNum_].rxCount;
+    const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
+
+    bTable[epNum_].rxCount =
+        rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
+    for (size_t wordsLeft = epBytesCount / 2; wordsLeft > 0; --wordsLeft) {
+        data.write(reinterpret_cast<const uint8_t *>(epBuf), 2);
+        epBuf++;
+    }
+    if (epBytesCount % 2) {
+        data.push(epBuf->data);
+    }
+    return epBytesCount;
 }
 
-void controlRxHandler() { ; }
+size_t writeFromFifo(descriptor::EndpointIndex epNum,
+                     fifo::Fifo<uint8_t, global::cdcFifoLenTx> data) {
+    const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
+    size_t count =
+        std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
+    io::pBufferData *epBuf = txBuf(epNum_);
+    for (size_t wordsLeft = count / 2; wordsLeft > 0; --wordsLeft) {
+        data.read(reinterpret_cast<uint8_t *>(epBuf), 2);
+        epBuf++;
+    }
+    if (count % 2) {
+        epBuf->data = data.pop();
+    }
+    bTable[epNum_].txCount = count;
+    io::epRegs(epNum_) = ((io::epRegs(epNum_) ^ USB_EP_TX_VALID) &
+                          (USB_EPREG_MASK | USB_EPTX_STAT)) |
+                         (USB_EP_CTR_RX | USB_EP_CTR_TX);
+    return count;
+}
+
+namespace control {
+
+enum class status { ack = 0x00, nak = 0x01, fail = 0x02 };
+
+status processRequest() {
+    if ((controlState.setup.type == Setup::type_class) &&
+        (controlState.setup.recipient == Setup::recipient_interface)) {
+        if ((controlState.setup.wIndex ==
+             static_cast<uint16_t>(descriptor::InterfaceIndex::jtag)) ||
+            (controlState.setup.wIndex ==
+             static_cast<uint16_t>(descriptor::InterfaceIndex::shell))) {
+            return status::ack;
+        } else if (controlState.setup.wIndex ==
+                   static_cast<uint16_t>(descriptor::InterfaceIndex::uart)) {
+            switch (static_cast<cdc::Request>(controlState.setup.bRequest)) {
+            case cdc::Request::set_control_line_state:
+                cdcPayload::setControlLineState(controlState.setup.wValue);
+                return status::ack;
+            case cdc::Request::set_line_coding: {
+                const cdcPayload::LineCoding *lineCoding =
+                    static_cast<cdcPayload::LineCoding *>(
+                        static_cast<void *>(controlState.setup.payload));
+                if (controlState.setup.wLength ==
+                    sizeof(cdcPayload::LineCoding)) {
+                    bool dryRun = false;
+                    if (!global::uartTx.isEmpty()) {
+                        dryRun = true;
+                    }
+                    cdcPayload::setLineCoding(lineCoding, dryRun);
+                }
+            } break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
+static inline void epStall() {
+    endpointSetStall(descriptor::EndpointIndex::control,
+                     descriptor::Endpoint::Direction::out, true);
+    endpointSetStall(descriptor::EndpointIndex::control,
+                     descriptor::Endpoint::Direction::in, true);
+    controlState.state = ControlState::State::idle;
+}
+
+void rxDispatch() {
+    size_t setupSize;
+    size_t payloadBytesReceived = 0;
+    switch (controlState.state) {
+    case ControlState::State::idle:
+        setupSize =
+            read(descriptor::EndpointIndex::control,
+                 static_cast<void *>(&controlState.setup), sizeof(Setup));
+        if (setupSize != sizeof(Setup)) {
+            epStall();
+            return;
+        } else {
+            controlState.currentPayload = controlState.setup.payload;
+            controlState.payloadLeft = controlState.setup.wLength;
+            if ((controlState.setup.direction ==
+                 Setup::direction_host_to_device) &&
+                (controlState.setup.wLength != 0)) {
+                if (controlState.setup.wLength > sizeof(Setup::payload)) {
+                    epStall();
+                } else {
+                    controlState.state = ControlState::State::rx;
+                }
+                return;
+            }
+        }
+        break;
+    case ControlState::State::rx:
+        payloadBytesReceived =
+            read(descriptor::EndpointIndex::control,
+                 controlState.currentPayload, controlState.setup.wLength);
+        if (controlState.setup.wLength != payloadBytesReceived) {
+            controlState.currentPayload += payloadBytesReceived;
+            controlState.payloadLeft -= payloadBytesReceived;
+            return;
+        }
+        break;
+    case ControlState::State::statusOut:
+        read(descriptor::EndpointIndex::control, nullptr, 0);
+        controlState.state = ControlState::State::idle;
+        break;
+    default:
+        epStall();
+        return;
+    }
+    controlState.currentPayload = controlState.setup.payload;
+    controlState.payloadLeft = sizeof(Setup::payload);
+    switch (0) {}
+}
+
+} // namespace control
+void controlRxHandler() { control::rxDispatch(); }
 void controlTxHandler() { ; }
-void controlSetupHandler() { ; }
+void controlSetupHandler() {
+    controlState.state = ControlState::State::idle;
+    control::rxDispatch();
+}
 
 void uartRxHandler() { ; }
 void uartTxHandler() { ; }
@@ -96,21 +301,19 @@ constexpr uint16_t convertEpType(descriptor::Endpoint::EpType t) {
 
 void init(void) {
     /* Force USB re-enumeration */
-    usbPins.clockOn();
-    usbPins.write(false, false);
-    usbPins.configOutput<0>(gpio::OutputType::gen_pp,
-                            gpio::OutputSpeed::_10mhz);
-    usbPins.configOutput<1>(gpio::OutputType::gen_pp,
-                            gpio::OutputSpeed::_10mhz);
+    global::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_10mhz);
+    global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_10mhz);
 
     for (int i = 0; i < 0xFFFF; i++) {
         __NOP();
     }
 
-    usbPins.configOutput<0>(gpio::OutputType::alt_pp,
-                            gpio::OutputSpeed::_10mhz);
-    usbPins.configOutput<1>(gpio::OutputType::alt_pp,
-                            gpio::OutputSpeed::_10mhz);
+    global::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
+                                    gpio::OutputSpeed::_50mhz);
+    global::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
+                                    gpio::OutputSpeed::_50mhz);
     NVIC_EnableIRQ(USB_LP_IRQn);
     NVIC_DisableIRQ(USB_LP_IRQn);
 
@@ -123,10 +326,14 @@ void init(void) {
 }
 
 void reset(void) {
+    deviceState.state = DeviceState::State::reset;
+    deviceState.address = 0;
+    deviceState.configuration = 0;
     uint16_t offset = sizeof(io::bTableEntity) * 8 / 2;
     using descriptor::endpoints;
-    for (int epNum = 0;
-         epNum < static_cast<int>(descriptor::EndpointIndex::last); epNum++) {
+    for (std::ptrdiff_t epNum = 0;
+         epNum < static_cast<std::ptrdiff_t>(descriptor::EndpointIndex::last);
+         epNum++) {
 
         bTable[epNum].txOffset = offset;
         bTable[epNum].txCount = 0;

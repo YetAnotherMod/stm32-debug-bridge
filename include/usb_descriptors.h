@@ -27,7 +27,7 @@ enum class EndpointIndex {
     last
 };
 namespace epSize {
-constexpr std::uint16_t control = 16;
+constexpr std::uint16_t control = sizeof(::usb::Setup);
 constexpr std::uint16_t interrupt = 16;
 constexpr std::uint16_t small = 32;
 constexpr std::uint16_t large = 64;

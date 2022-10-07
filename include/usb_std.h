@@ -172,6 +172,10 @@ struct Interface : Base {
 struct Endpoint : Base {
     static constexpr uint8_t directionOut = 0x00;
     static constexpr uint8_t directionIn = 0x80;
+    enum class Direction : uint8_t{
+        in = directionIn,
+        out = directionOut
+    };
     enum class EpType : uint8_t {
         control = 0x00,
         isochronous = 0x01,
@@ -215,7 +219,7 @@ struct Setup {
     static constexpr std::uint8_t direction_host_to_device = 0;
     static constexpr std::uint8_t direction_device_to_host = 1;
     static constexpr std::uint8_t type_standard = 0;
-    static constexpr std::uint8_t type_class_ = 1;
+    static constexpr std::uint8_t type_class = 1;
     static constexpr std::uint8_t type_vendor = 2;
     static constexpr std::uint8_t type_reserved = 3;
     static constexpr std::uint8_t recipient_device = 0;
@@ -241,14 +245,14 @@ struct Setup {
         get_configuration = 0x08,
         set_configuration = 0x09
     };
-    Request bRequest;
+    uint8_t bRequest;
     std::uint16_t wValue;
     std::uint16_t wIndex;
     std::uint16_t wLength;
-    uint8_t payload[256 - 8];
+    uint8_t payload[32];
 } __attribute__((packed));
 
-static_assert(sizeof(Setup) == 256, "bad size");
+static_assert(sizeof(Setup) == 40, "bad size");
 static_assert(alignof(Setup) == 1, "bad align");
 
 namespace io {
@@ -303,13 +307,6 @@ struct Endpoint {
 
 } // namespace io
 
-enum class status { ack = 0x00, nak = 0x01, fail = 0x02 };
-
-enum class deviceState {
-    usb_device_state_reset = 0x00,
-    usb_device_state_address_set = 0x01,
-    usb_device_state_configured = 0x02
-};
 
 enum class LanguageCode : char16_t { en_US = 0x0409 };
 

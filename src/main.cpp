@@ -17,7 +17,7 @@ void ClockInit(void) {
           RCC_CFGR_PPRE2_Msk | RCC_CFGR_PPRE1_Msk | RCC_CFGR_HPRE_Msk |
           RCC_CFGR_SWS_Msk | RCC_CFGR_SW_Msk);
 
-    RCC->CR |= RCC_CR_HSION;
+    RCC->CR = RCC->CR | RCC_CR_HSION;
     while ((RCC->CR & RCC_CR_HSIRDY_Msk) == 0)
         ;
 
@@ -47,7 +47,7 @@ void ClockInit(void) {
 }
 
 extern "C" void __terminate() {
-    led.writeLow();
+    global::led.writeLow();
 #ifdef NDEBUG
     SCB->AIRCR = (0x5FA<<SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk;
 #endif
@@ -56,9 +56,23 @@ extern "C" void __terminate() {
 }
 
 void PortsInit(void){
-    led.clockOn();
-    led.writeHigh();
-    led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+    global::led.clockOn();
+    global::led.writeHigh();
+    global::led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+
+    global::usbPins.clockOn();
+    global::usbPins.write(false, false);
+    global::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
+                            gpio::OutputSpeed::_10mhz);
+    global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
+                            gpio::OutputSpeed::_10mhz);
+    global::jtagOut.clockOn();
+    global::jtagOut.write(false,false,false);
+    global::jtagOut.configOutput<0>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+    global::jtagOut.configOutput<1>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+    global::jtagOut.configOutput<2>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+
+    global::jtagIn.configInput<0>(gpio::InputType::floating);
 }
 
 int main() {

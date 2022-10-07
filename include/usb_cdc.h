@@ -24,30 +24,6 @@ constexpr std::uint8_t networkConnection = 0x08;
 constexpr std::uint8_t default_ = lineCoding;
 }; // namespace acmCapability
 
-namespace serialState {
-constexpr std::uint16_t dcd = 0x01;
-constexpr std::uint16_t dsr = 0x02;
-constexpr std::uint16_t ri = 0x08;
-constexpr std::uint16_t parityError = 0x20;
-constexpr std::uint16_t overrun = 0x40;
-} // namespace serialState
-
-enum class CharFormat { stopBit1, stopBit1p5, stopBit2, last };
-
-enum class ParityType { none, odd, even, mark, space, last };
-
-enum class DataBits {
-    bits5 = 5,
-    bits6 = 6,
-    bits7 = 7,
-    bits8 = 8,
-    bit16 = 16,
-};
-
-namespace lineState {
-constexpr std::uint16_t dtr = 0x01;
-constexpr std::uint16_t rts = 0x02;
-} // namespace lineState
 
 enum class Request : std::uint8_t {
     send_encapsulated_command = 0x00,

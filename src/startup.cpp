@@ -245,7 +245,7 @@ __attribute__((section(".isr_vector"))) IsrVectors g_pfnVectors = {
     .BootRAM_ = BootRAM};
 
 extern "C" int main();
-extern "C" int SystemInit();
+extern "C" void SystemCoreClockUpdate(void);
 extern "C" void __libc_init_array();
 extern "C" void __libc_fini_array();
 
@@ -253,12 +253,11 @@ class startup {
   private:
     /* data */
   public:
-    startup(/* args */){ __libc_init_array(); }
-    ~startup(){ __libc_fini_array(); }
+    startup(/* args */) { __libc_init_array(); }
+    ~startup() { __libc_fini_array(); }
 };
 
 extern "C" void Reset_Handler() {
-
     {
         extern std::uint32_t _sdata[];
         extern std::uint32_t _edata[];
@@ -278,11 +277,122 @@ extern "C" void Reset_Handler() {
         }
     }
     try {
-        SystemInit();
         startup libcHolder;
         main();
     } catch (...) {
         ;
     }
     __terminate();
+}
+
+#include "stm32f1xx.h"
+
+extern "C" {
+
+uint32_t SystemCoreClock = 16000000;
+
+const uint8_t AHBPrescTable[16U] = {0, 0, 0, 0, 0, 0, 0, 0,
+                                    1, 2, 3, 4, 6, 7, 8, 9};
+
+const uint8_t APBPrescTable[8U] = {0, 0, 0, 0, 1, 2, 3, 4};
+
+void SystemCoreClockUpdate(void) {
+    uint32_t tmp = 0U, pllMull = 0U, pllSource = 0U;
+
+    constexpr std::uint32_t hsiValue = 8000000U;
+    constexpr std::uint32_t hseValue = HSE_VALUE;
+
+#if defined(STM32F105xC) || defined(STM32F107xC)
+    uint32_t preDiv1Source = 0U, preDiv1Factor = 0U, preDiv2Factor = 0U,
+             pll2Mull = 0U;
+#endif /* STM32F105xC */
+
+#if defined(STM32F100xB) || defined(STM32F100xE)
+    uint32_t preDiv1Factor = 0U;
+#endif /* STM32F100xB or STM32F100xE */
+
+    /* Get SYSCLK source
+     * -------------------------------------------------------*/
+    tmp = RCC->CFGR & RCC_CFGR_SWS;
+
+    switch (tmp) {
+    case 0x00U: /* HSI used as system clock */
+        SystemCoreClock = hsiValue;
+        break;
+    case 0x04U: /* HSE used as system clock */
+        SystemCoreClock = hseValue;
+        break;
+    case 0x08U: /* PLL used as system clock */
+
+        /* Get PLL clock source and multiplication factor
+         * ----------------------*/
+        pllMull = RCC->CFGR & RCC_CFGR_PLLMULL;
+        pllSource = RCC->CFGR & RCC_CFGR_PLLSRC;
+
+#if !defined(STM32F105xC) && !defined(STM32F107xC)
+        pllMull = (pllMull >> 18U) + 2U;
+
+        if (pllSource == 0x00U) {
+            /* HSI oscillator clock divided by 2 selected as PLL clock entry */
+            SystemCoreClock = (hsiValue >> 1U) * pllMull;
+        } else {
+#if defined(STM32F100xB) || defined(STM32F100xE)
+            preDiv1Factor = (RCC->CFGR2 & RCC_CFGR2_PREDIV1) + 1U;
+            /* HSE oscillator clock selected as PREDIV1 clock entry */
+            SystemCoreClock = (hseValue / preDiv1Factor) * pllMull;
+#else
+            /* HSE selected as PLL clock entry */
+            if ((RCC->CFGR & RCC_CFGR_PLLXTPRE) !=
+                (uint32_t)RESET) { /* HSE oscillator clock divided by 2 */
+                SystemCoreClock = (hseValue >> 1U) * pllMull;
+            } else {
+                SystemCoreClock = hseValue * pllMull;
+            }
+#endif
+        }
+#else
+        pllMull = pllMull >> 18U;
+
+        if (pllMull != 0x0DU) {
+            pllMull += 2U;
+        } else { /* PLL multiplication factor = PLL input clock * 6.5 */
+            pllMull = 13U / 2U;
+        }
+
+        if (pllSource == 0x00U) {
+            /* HSI oscillator clock divided by 2 selected as PLL clock entry */
+            SystemCoreClock = (hsiValue >> 1U) * pllMull;
+        } else { /* PREDIV1 selected as PLL clock entry */
+
+            /* Get PREDIV1 clock source and division factor */
+            preDiv1Source = RCC->CFGR2 & RCC_CFGR2_PREDIV1SRC;
+            preDiv1Factor = (RCC->CFGR2 & RCC_CFGR2_PREDIV1) + 1U;
+
+            if (preDiv1Source == 0U) {
+                /* HSE oscillator clock selected as PREDIV1 clock entry */
+                SystemCoreClock = (hseValue / preDiv1Factor) * pllMull;
+            } else { /* PLL2 clock selected as PREDIV1 clock entry */
+
+                /* Get PREDIV2 division factor and PLL2 multiplication factor */
+                preDiv2Factor = ((RCC->CFGR2 & RCC_CFGR2_PREDIV2) >> 4U) + 1U;
+                pll2Mull = ((RCC->CFGR2 & RCC_CFGR2_PLL2MUL) >> 8U) + 2U;
+                SystemCoreClock =
+                    (((hseValue / preDiv2Factor) * pll2Mull) / preDiv1Factor) *
+                    pllMull;
+            }
+        }
+#endif /* STM32F105xC */
+        break;
+
+    default:
+        SystemCoreClock = hsiValue;
+        break;
+    }
+
+    /* Compute HCLK clock frequency ----------------*/
+    /* Get HCLK prescaler */
+    tmp = AHBPrescTable[((RCC->CFGR & RCC_CFGR_HPRE) >> 4U)];
+    /* HCLK clock frequency */
+    SystemCoreClock >>= tmp;
+}
 }
