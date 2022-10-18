@@ -53,7 +53,7 @@ struct DeviceConfiguration : Configuration {
         Endpoint dataTxEp;
         constexpr SingleAcm(InterfaceIndex iInd, cdc::serialInd sInd,
                             EndpointIndex ecInd, EndpointIndex edInd)
-            : iad(static_cast<uint8_t>(iInd), 2,
+            : iad(static_cast<uint8_t>(iInd) * 2, 2,
                   static_cast<uint8_t>(Device::Class::comm), cdc::Subclass::acm,
                   cdc::Protocol::protocolDefault,
                   static_cast<uint8_t>(StringIndex::none)),
@@ -93,9 +93,8 @@ struct DeviceConfiguration : Configuration {
                EndpointIndex::jtagInterrupt, EndpointIndex::jtagData) {}
 
 } __attribute__((packed));
-extern const Device device;
-extern const DeviceConfiguration deviceConfig;
-extern const Base *strings[static_cast<std::size_t>(StringIndex::last)];
 extern const io::Endpoint endpoints[static_cast<std::size_t>(EndpointIndex::last)];
+
+uint16_t get(uint16_t wValue, const uint8_t * &payload);
 } // namespace descriptor
 } // namespace usb

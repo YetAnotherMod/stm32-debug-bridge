@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+extern "C" void __terminate();
+
 namespace usb {
 
 struct DeviceState {
@@ -22,6 +24,7 @@ struct ControlState {
     State state;
     Setup setup;
     uint8_t *currentPayload;
+    const uint8_t *payloadTx;
     uint16_t payloadLeft;
 };
 
@@ -50,12 +53,13 @@ static inline void endpointSetStall(descriptor::EndpointIndex epNum,
             if ((epReg_ & USB_EPRX_STAT_Msk) != USB_EP_RX_DIS) {
                 if (stall) {
                     epReg = ((epReg_ ^ USB_EP_RX_STALL) &
-                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
+                             (USB_EPREG_MASK | USB_EPRX_STAT_Msk)) |
                             (USB_EP_CTR_RX | USB_EP_CTR_TX);
                 } else {
-                    // TODO: разобраться какого чёрта тут TX
-                    epReg = ((epReg_ ^ USB_EP_TX_VALID) &
-                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk |
+                    // TODO: судя по всему, опечатка, т.к. иначе мы в результате
+                    // ((xor) and) всегда получаем 0
+                    epReg = ((epReg_ ^ USB_EP_RX_VALID) &
+                             (USB_EPREG_MASK | USB_EPRX_STAT_Msk |
                               USB_EP_DTOG_RX)) |
                             (USB_EP_CTR_RX | USB_EP_CTR_TX);
                 }
@@ -169,7 +173,7 @@ namespace control {
 
 enum class status { ack = 0x00, nak = 0x01, fail = 0x02 };
 
-status processRequest() {
+static status processRequest() {
     if ((controlState.setup.type == Setup::type_class) &&
         (controlState.setup.recipient == Setup::recipient_interface)) {
         if ((controlState.setup.wIndex ==
@@ -193,14 +197,106 @@ status processRequest() {
                     if (!global::uartTx.isEmpty()) {
                         dryRun = true;
                     }
-                    cdcPayload::setLineCoding(lineCoding, dryRun);
+                    if (cdcPayload::setLineCoding(lineCoding, dryRun)) {
+                        return status::ack;
+                    }
                 }
-            } break;
+                return status::fail;
+            }
+            case cdc::Request::get_line_coding:
+                if (controlState.setup.wLength ==
+                    sizeof(cdcPayload::LineCoding)) {
+                    controlState.payloadTx = static_cast<uint8_t *>(
+                        static_cast<void *>(&global::uartLineCoding));
+                    return status::ack;
+                }
+                return status::fail;
+            default:
+                return status::fail;
+            }
+        }
+    } else if (controlState.setup.type == Setup::type_standard) {
+        switch (controlState.setup.recipient) {
+        case Setup::recipient_device:
+            switch (static_cast<Setup::Request>(controlState.setup.bRequest)) {
+            case Setup::Request::get_configuration:
+                controlState.setup.payload[0] = deviceState.configuration;
+                controlState.payloadTx = controlState.setup.payload;
+                controlState.payloadLeft = 1;
+                return status::ack;
+            case Setup::Request::get_descriptor:
+                controlState.payloadLeft = descriptor::get(
+                    controlState.setup.wValue, controlState.payloadTx);
+                if (controlState.payloadLeft != 0) {
+                    return status::ack;
+                }
+                return status::fail;
+            case Setup::Request::get_status:
+                controlState.setup.payload[0] = deviceState.configuration;
+                controlState.setup.payload[1] = deviceState.configuration;
+                controlState.payloadTx = controlState.setup.payload;
+                controlState.payloadLeft = 2;
+                return status::ack;
+            // TODO: в оригинале были какие-то лютые сложности, попробовал
+            // выставлять сразу
+            case Setup::Request::set_address:
+                deviceState.address =
+                    controlState.setup.wValue & USB_DADDR_ADD_Msk;
+                return status::ack;
+            case Setup::Request::set_configuration: {
+                uint8_t device_configuration = controlState.setup.wValue & 0xff;
+                if (device_configuration == 1) {
+                    deviceState.configuration = device_configuration;
+                    return status::ack;
+                }
+                break;
+            }
             default:
                 break;
             }
+            return status::fail;
+        case Setup::recipient_interface:
+            if (controlState.setup.bRequest ==
+                static_cast<uint8_t>(Setup::Request::get_status)) {
+                controlState.setup.payload[0] = 0;
+                controlState.setup.payload[1] = 0;
+                controlState.payloadTx = controlState.setup.payload;
+                controlState.payloadLeft = 2;
+                return status::ack;
+            }
+            break;
+        case Setup::recipient_endpoint: {
+            descriptor::EndpointIndex epNum =
+                static_cast<descriptor::EndpointIndex>(
+                    controlState.setup.wIndex &
+                    ~(descriptor::Endpoint::directionIn));
+            descriptor::Endpoint::Direction dir =
+                static_cast<descriptor::Endpoint::Direction>(
+                    controlState.setup.wIndex &
+                    descriptor::Endpoint::directionIn);
+            switch (static_cast<Setup::Request>(controlState.setup.bRequest)) {
+            case Setup::Request::set_feature:
+            case Setup::Request::clear_feature: {
+                bool epStall =
+                    (static_cast<Setup::Request>(controlState.setup.bRequest) ==
+                     Setup::Request::set_feature);
+                endpointSetStall(epNum, dir, epStall);
+                return status::ack;
+            }
+            case Setup::Request::get_status:
+                controlState.setup.payload[0] = endpointGetStall(epNum, dir);
+                controlState.setup.payload[1] = 0;
+                controlState.payloadTx = controlState.setup.payload;
+                controlState.payloadLeft = 2;
+                return status::ack;
+            default:
+                break;
+            }
+            break;
+        }
         }
     }
+    return status::fail;
 }
 
 static inline void epStall() {
@@ -210,7 +306,44 @@ static inline void epStall() {
                      descriptor::Endpoint::Direction::in, true);
     controlState.state = ControlState::State::idle;
 }
+void setAddr() {
+    if (deviceState.address != 0) {
+        USB->DADDR = USB_DADDR_EF | deviceState.address;
+    }
+}
+void txDispatch() {
+    size_t bytesSent = 0;
+    switch (controlState.state) {
+    case ControlState::State::tx:
+    case ControlState::State::txZlp:
+        bytesSent =
+            write(descriptor::EndpointIndex::control,
+                  controlState.payloadTx, controlState.payloadLeft);
+        controlState.payloadTx += bytesSent;
+        controlState.payloadLeft -= bytesSent;
+        if (controlState.payloadLeft == 0) {
+            if ((controlState.state == ControlState::State::tx) ||
+                (bytesSent !=
+                 descriptor::endpoints[static_cast<uint8_t>(
+                                           descriptor::EndpointIndex::control)]
+                     .txSize)) {
+                controlState.state = ControlState::State::txLast;
+            }
+        }
+        break;
+    case ControlState::State::txLast:
+        controlState.state = ControlState::State::statusOut;
+        break;
+    case ControlState::State::statusIn:
+        controlState.state = ControlState::State::idle;
+        setAddr();
+        break;
 
+    default:
+        __terminate();
+        break;
+    }
+}
 void rxDispatch() {
     size_t setupSize;
     size_t payloadBytesReceived = 0;
@@ -219,7 +352,7 @@ void rxDispatch() {
         setupSize =
             read(descriptor::EndpointIndex::control,
                  static_cast<void *>(&controlState.setup), sizeof(Setup));
-        if (setupSize != sizeof(Setup)) {
+        if (setupSize != (sizeof(Setup) - sizeof(Setup::payload))) {
             epStall();
             return;
         } else {
@@ -257,12 +390,34 @@ void rxDispatch() {
     }
     controlState.currentPayload = controlState.setup.payload;
     controlState.payloadLeft = sizeof(Setup::payload);
-    switch (0) {}
+    switch (processRequest()) {
+    case status::ack:
+        if (controlState.setup.direction == Setup::direction_device_to_host) {
+            if (controlState.payloadLeft < controlState.setup.wLength) {
+                controlState.state = ControlState::State::txZlp;
+            } else {
+                if (controlState.payloadLeft > controlState.setup.wLength) {
+                    controlState.payloadLeft = controlState.setup.wLength;
+                }
+                controlState.state = ControlState::State::tx;
+            }
+            txDispatch();
+        } else {
+            write(descriptor::EndpointIndex::control, nullptr, 0);
+            controlState.state = ControlState::State::statusIn;
+        }
+        break;
+    case status::nak:
+        controlState.state = ControlState::State::statusIn;
+        break;
+    default:
+        epStall();
+    }
 }
 
 } // namespace control
 void controlRxHandler() { control::rxDispatch(); }
-void controlTxHandler() { ; }
+void controlTxHandler() { control::txDispatch(); }
 void controlSetupHandler() {
     controlState.state = ControlState::State::idle;
     control::rxDispatch();
@@ -305,24 +460,26 @@ void init(void) {
                                     gpio::OutputSpeed::_10mhz);
     global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
                                     gpio::OutputSpeed::_10mhz);
+    USB->ISTR = 0;
+
+    NVIC_EnableIRQ(USB_LP_IRQn);
+    NVIC_DisableIRQ(USB_HP_IRQn);
+
+    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USBEN;
+    USB->CNTR = USB_CNTR_RESETM | USB_CNTR_FRES;
+    USB->BTABLE = 0;
+    USB->DADDR = 0;
 
     for (int i = 0; i < 0xFFFF; i++) {
         __NOP();
     }
 
-    global::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
-    global::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
-    NVIC_EnableIRQ(USB_LP_IRQn);
-    NVIC_DisableIRQ(USB_LP_IRQn);
-
-    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USBEN;
-    USB->CNTR = USB_CNTR_FRES;
-    USB->BTABLE = 0;
-    USB->DADDR = 0;
-    USB->ISTR = 0;
     USB->CNTR = USB_CNTR_RESETM;
+
+    global::usbPins.configOutput<0>(gpio::OutputType::alt_od,
+                                    gpio::OutputSpeed::_50mhz);
+    global::usbPins.configOutput<1>(gpio::OutputType::alt_od,
+                                    gpio::OutputSpeed::_50mhz);
 }
 
 void reset(void) {
@@ -351,15 +508,20 @@ void reset(void) {
                 << USB_COUNT0_RX_NUM_BLOCK_Pos;
         }
         offset += endpoints[epNum].rxSize;
-        io::epRegs(epNum) = USB_EP_RX_VALID | USB_EP_TX_NAK |
-                            convertEpType(endpoints[epNum].type) | epNum;
+        uint16_t tmp = io::epRegs(epNum);
+        tmp &= USB_EP_T_FIELD;
+        tmp ^= USB_EP_RX_VALID | USB_EP_TX_NAK;
+        tmp |= epNum | convertEpType(endpoints[epNum].type);
+        io::epRegs(epNum) = tmp;
     }
-    USB->CNTR = USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM |
-                USB_CNTR_WKUPM | USB_CNTR_SOFM;
+    USB->CNTR =
+        USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM | USB_CNTR_WKUPM;
     USB->DADDR = USB_DADDR_EF;
 }
 } // namespace usb
 extern "C" void USB_LP_IRQHandler() {
+    global::led.writeLow();
+    volatile static uint16_t epregs[8];
     using usb::descriptor::endpoints;
     uint16_t istr = USB->ISTR;
     if (istr & USB_ISTR_CTR) {
@@ -367,8 +529,7 @@ extern "C" void USB_LP_IRQHandler() {
         auto epReg = usb::io::epRegs(epNum);
         usb::io::epRegs(epNum) = epReg & (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk |
                                           USB_EPADDR_FIELD_Msk);
-        epReg &= (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk | USB_EPADDR_FIELD_Msk |
-                  USB_EP_CTR_TX | USB_EP_CTR_RX);
+        epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk );
         if (epReg & USB_EP_CTR_TX) {
             if (endpoints[epNum].txHandler) {
                 endpoints[epNum].txHandler();
@@ -385,6 +546,14 @@ extern "C" void USB_LP_IRQHandler() {
     } else if (istr & USB_ISTR_RESET) {
         USB->ISTR = (uint16_t)(~USB_ISTR_RESET);
         usb::reset();
+        epregs[0] = USB->EP0R;
+        epregs[1] = USB->EP1R;
+        epregs[2] = USB->EP2R;
+        epregs[3] = USB->EP3R;
+        epregs[4] = USB->EP4R;
+        epregs[5] = USB->EP5R;
+        epregs[6] = USB->EP6R;
+        epregs[7] = USB->EP7R;
     } else if (istr & USB_ISTR_SUSP) {
         USB->ISTR = (uint16_t)(~USB_ISTR_SUSP);
         USB->CNTR = USB->CNTR | USB_CNTR_FSUSP;
@@ -392,5 +561,8 @@ extern "C" void USB_LP_IRQHandler() {
     } else if (istr & USB_ISTR_WKUP) {
         USB->ISTR = (uint16_t)(~USB_ISTR_WKUP);
         USB->CNTR = USB->CNTR & ~USB_CNTR_FSUSP;
+    } else {
+        __terminate();
     }
+    global::led.writeHigh();
 }

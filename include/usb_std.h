@@ -30,8 +30,8 @@ enum class Type : std::uint8_t {
     cs_endpoint = 0x25,
 };
 struct Base {
-    std::uint8_t bLength;
-    Type bDescriptorType;
+    const std::uint8_t bLength;
+    const Type bDescriptorType;
     constexpr Base(std::uint8_t bLength, Type bDescriptorType)
         : bLength(bLength), bDescriptorType(bDescriptorType) {}
 } __attribute__((packed));
@@ -99,6 +99,28 @@ struct Device : Base {
 } __attribute__((packed));
 static_assert(sizeof(Device) == 18, "incorrect size");
 static_assert(alignof(Device) <= 2, "incorrect align");
+
+struct Qualifier : Base {
+    std::uint16_t bcdUSB;
+    Device::Class bDeviceClass;
+    Device::SubClass bDeviceSubClass;
+    Device::Protocol bDeviceProtocol;
+    std::uint8_t bMaxPacketSize;
+    std::uint8_t bNumConfigurations;
+    std::uint8_t bReserved;
+    constexpr Qualifier(std::uint16_t bcdUSB, Device::Class bDeviceClass,
+                        Device::SubClass bDeviceSubClass,
+                        Device::Protocol bDeviceProtocol,
+                        std::uint8_t bMaxPacketSize,
+                        std::uint8_t bNumConfigurations)
+        : Base(sizeof(*this), Type::qualifier), bcdUSB(bcdUSB),
+          bDeviceClass(bDeviceClass), bDeviceSubClass(bDeviceSubClass),
+          bDeviceProtocol(bDeviceProtocol), bMaxPacketSize(bMaxPacketSize),
+          bNumConfigurations(bNumConfigurations), bReserved(0) {}
+} __attribute__((packed));
+
+static_assert(sizeof(Qualifier) == 10, "incorrect size");
+static_assert(alignof(Qualifier) <= 2, "incorrect align");
 
 constexpr uint8_t operator"" _ma(unsigned long long int v) {
     return (v >= 500) ? static_cast<uint8_t>(250) : static_cast<uint8_t>(v / 2);
@@ -172,10 +194,7 @@ struct Interface : Base {
 struct Endpoint : Base {
     static constexpr uint8_t directionOut = 0x00;
     static constexpr uint8_t directionIn = 0x80;
-    enum class Direction : uint8_t{
-        in = directionIn,
-        out = directionOut
-    };
+    enum class Direction : uint8_t { in = directionIn, out = directionOut };
     enum class EpType : uint8_t {
         control = 0x00,
         isochronous = 0x01,
@@ -196,7 +215,7 @@ struct Endpoint : Base {
 template <char16_t... chars> struct String : Base {
     char16_t wString[sizeof...(chars)];
     constexpr String() : Base(sizeof(*this), Type::string), wString{chars...} {}
-};
+} __attribute__((aligned(4)));
 
 template <typename CharT, CharT... chars> String<chars...> operator"" _sd() {
     static_assert(sizeof(CharT) == 2, "must be utf16 string");
@@ -249,10 +268,10 @@ struct Setup {
     std::uint16_t wValue;
     std::uint16_t wIndex;
     std::uint16_t wLength;
-    uint8_t payload[32];
+    uint8_t payload[56];
 } __attribute__((packed));
 
-static_assert(sizeof(Setup) == 40, "bad size");
+static_assert(sizeof(Setup) == 64, "bad size");
 static_assert(alignof(Setup) == 1, "bad align");
 
 namespace io {
@@ -273,12 +292,8 @@ static_assert(alignof(bTableEntity) == 4);
 
 struct pBufferData {
     pbAlignedWord data;
-    uint16_t &operator = (uint16_t v){
-        return data = v;
-    }
-    operator uint16_t (){
-        return data;
-    }
+    uint16_t &operator=(uint16_t v) { return data = v; }
+    operator uint16_t() { return data; }
 };
 
 static_assert(sizeof(pBufferData) == 4);
@@ -306,7 +321,6 @@ struct Endpoint {
 };
 
 } // namespace io
-
 
 enum class LanguageCode : char16_t { en_US = 0x0409 };
 

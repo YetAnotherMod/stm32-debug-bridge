@@ -38,12 +38,17 @@ add_executable(firmware.elf src/main.cpp
     src/usb.cpp
     src/startup.cpp
     src/global_resources.cpp
+    src/uart.cpp
 )
 
 add_custom_command(TARGET firmware.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -Obinary firmware.elf firmware.bin
     COMMAND ${CMAKE_OBJCOPY} -Oihex firmware.elf firmware.hex
 )
+
+add_custom_target(upload 
+    COMMAND dfu-util -D firmware.bin
+    DEPENDS firmware.elf)
 
 include(ExternalProject)
 

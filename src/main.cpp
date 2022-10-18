@@ -1,9 +1,9 @@
 
 #include <stm32f1xx.h>
 
+#include <global_resources.h>
 #include <gpio.h>
 #include <usb.h>
-#include <global_resources.h>
 
 void ClockInit(void) {
     uint32_t reservedBitsCr =
@@ -43,44 +43,54 @@ void ClockInit(void) {
     RCC->CR = reservedBitsCr | RCC_CR_HSION | RCC_CR_HSEON | RCC_CR_PLLON;
     while ((RCC->CR & RCC_CR_PLLRDY_Msk) != 0)
         ;
+
+    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
+    while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL)
+        ;
     SystemCoreClockUpdate();
 }
 
 extern "C" void __terminate() {
+    __disable_irq();
     global::led.writeLow();
 #ifdef NDEBUG
-    SCB->AIRCR = (0x5FA<<SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk;
+    SCB->AIRCR = (0x5FA << SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk;
 #endif
     while (1)
         ;
 }
 
-void PortsInit(void){
+static void PortsInit(void) {
     global::led.clockOn();
     global::led.writeHigh();
-    global::led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+    global::led.configOutput(gpio::OutputType::gen_pp,
+                             gpio::OutputSpeed::_2mhz);
 
     global::usbPins.clockOn();
     global::usbPins.write(false, false);
     global::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
-                            gpio::OutputSpeed::_10mhz);
+                                    gpio::OutputSpeed::_10mhz);
     global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
-                            gpio::OutputSpeed::_10mhz);
+                                    gpio::OutputSpeed::_10mhz);
     global::jtagOut.clockOn();
-    global::jtagOut.write(false,false,false);
-    global::jtagOut.configOutput<0>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
-    global::jtagOut.configOutput<1>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
-    global::jtagOut.configOutput<2>(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+    global::jtagOut.write(false, false, false);
+    global::jtagOut.configOutput<0>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_2mhz);
+    global::jtagOut.configOutput<1>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_2mhz);
+    global::jtagOut.configOutput<2>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_2mhz);
 
     global::jtagIn.configInput<0>(gpio::InputType::floating);
 }
 
 int main() {
     ClockInit();
+    PortsInit();
+    __enable_irq();
     usb::init();
-    throw std::bad_exception();
     while (1) {
-        ;
+        __WFI();
     }
 
     return 0;
