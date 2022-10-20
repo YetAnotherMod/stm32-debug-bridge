@@ -1,15 +1,16 @@
+#include <string.h>
 #include <usb_callbacks.h>
 #include <usb_descriptors.h>
-#include <string.h>
 
 namespace usb {
 namespace descriptor {
 static const Device device(bcdVersion(2, 0, 0), Device::Class::misc,
-                    Device::SubClass::iad, Device::Protocol::iad,
-                    epSize::control, idVendor, idProduct, bcdVersion(0, 0, 0),
-                    static_cast<std::uint8_t>(StringIndex::manufacturer),
-                    static_cast<std::uint8_t>(StringIndex::product),
-                    static_cast<std::uint8_t>(StringIndex::serial), 1);
+                           Device::SubClass::iad, Device::Protocol::iad,
+                           epSize::control, idVendor, idProduct,
+                           bcdVersion(0, 0, 0),
+                           static_cast<std::uint8_t>(StringIndex::manufacturer),
+                           static_cast<std::uint8_t>(StringIndex::product),
+                           static_cast<std::uint8_t>(StringIndex::serial), 1);
 
 const DeviceConfiguration deviceConfig;
 
@@ -40,58 +41,64 @@ static const Base *strings[static_cast<std::size_t>(StringIndex::last)] = {
     &shellInterfaceName,
     &jtagInterfaceName};
 
-static const Qualifier qualifier(device.bcdUSB,device.bDeviceClass,device.bDeviceSubClass,device.bDeviceProtocol,device.bMaxPacketSize,0);
+static const Qualifier qualifier(device.bcdUSB, device.bDeviceClass,
+                                 device.bDeviceSubClass, device.bDeviceProtocol,
+                                 device.bMaxPacketSize, 0);
 
 const io::Endpoint endpoints[static_cast<std::size_t>(EndpointIndex::last)] = {
     {Endpoint::EpType::control, device.bMaxPacketSize, device.bMaxPacketSize,
      controlRxHandler, controlTxHandler, controlSetupHandler},
     {Endpoint::EpType::interrupt, 0,
      static_cast<std::uint8_t>(deviceConfig.uart.commEp.wMaxPacketSize),
-     nullptr, nullptr, uartInterruptHandler},
+     nullptr, nullptr, nullptr},
     {Endpoint::EpType::bulk,
      static_cast<std::uint8_t>(deviceConfig.uart.dataRxEp.wMaxPacketSize),
      static_cast<std::uint8_t>(deviceConfig.uart.dataTxEp.wMaxPacketSize),
-     uartRxHandler, uartTxHandler, nullptr},
+     uartRxHandler, nullptr, nullptr},
     {Endpoint::EpType::interrupt, 0,
      static_cast<std::uint8_t>(deviceConfig.shell.commEp.wMaxPacketSize),
-     nullptr, nullptr, shellInterruptHandler},
+     nullptr, nullptr, nullptr},
     {Endpoint::EpType::bulk,
      static_cast<std::uint8_t>(deviceConfig.shell.dataRxEp.wMaxPacketSize),
      static_cast<std::uint8_t>(deviceConfig.shell.dataTxEp.wMaxPacketSize),
-     shellRxHandler, shellTxHandler, nullptr},
+     shellRxHandler, nullptr, nullptr},
     {Endpoint::EpType::interrupt, 0,
      static_cast<std::uint8_t>(deviceConfig.jtag.commEp.wMaxPacketSize),
-     nullptr, nullptr, jtagInterruptHandler},
+     nullptr, nullptr, nullptr},
     {Endpoint::EpType::bulk,
      static_cast<std::uint8_t>(deviceConfig.jtag.dataRxEp.wMaxPacketSize),
      static_cast<std::uint8_t>(deviceConfig.jtag.dataTxEp.wMaxPacketSize),
-     jtagRxHandler, jtagTxHandler, nullptr}};
+     jtagRxHandler, nullptr, nullptr}};
 
-uint16_t get(uint16_t wValue, const uint8_t * &payload) {
+uint16_t get(uint16_t wValue, const uint8_t *&payload) {
     uint16_t size = 0;
     usb::descriptor::Type type =
         static_cast<usb::descriptor::Type>(wValue >> 8);
     uint8_t index = (wValue & 0xff);
     switch (type) {
     case usb::descriptor::Type::device:
-        payload = static_cast<const uint8_t *>(static_cast<const void *>(&device));
+        payload =
+            static_cast<const uint8_t *>(static_cast<const void *>(&device));
         size = sizeof(device);
         break;
 
     case usb::descriptor::Type::configuration:
-        payload = static_cast<const uint8_t *>(static_cast<const void *>(&deviceConfig));
+        payload = static_cast<const uint8_t *>(
+            static_cast<const void *>(&deviceConfig));
         size = sizeof(deviceConfig);
         break;
     case usb::descriptor::Type::qualifier:
-        payload = static_cast<const uint8_t *>(static_cast<const void *>(&qualifier));
+        payload =
+            static_cast<const uint8_t *>(static_cast<const void *>(&qualifier));
         size = sizeof(qualifier);
         break;
 
     case usb::descriptor::Type::string:
         if (index < static_cast<uint8_t>(StringIndex::last)) {
-            payload = static_cast<const uint8_t *>(static_cast<const void *>(strings[index]));
+            payload = static_cast<const uint8_t *>(
+                static_cast<const void *>(strings[index]));
             size = strings[index]->bLength;
-            
+
         } else {
             return 0;
         }

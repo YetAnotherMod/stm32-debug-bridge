@@ -16,8 +16,10 @@ fifo::Fifo<bool, 64> jtagResponse;
 
 gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
 gpio::Pin<gpio::Port::c, 13> led;
-gpio::Bulk<gpio::Port::b, 7, 8, 9> jtagOut;
+gpio::Bulk<gpio::Port::b, 12, 6, 9> jtagOut;
 gpio::Bulk<gpio::Port::a, 5> jtagIn;
+
+gpio::Bulk<gpio::Port::a, 0,1,2,3> uartPins;
 
 LineCodingControl uartLineCoding = {
     115200, usb::cdcPayload::CharFormat::stopBit1,

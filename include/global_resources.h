@@ -23,8 +23,9 @@ extern fifo::Fifo<bool, 64> jtagResponse;
 
 extern gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
 extern gpio::Pin<gpio::Port::c, 13> led;
-extern gpio::Bulk<gpio::Port::b, 7,8,9> jtagOut;
+extern gpio::Bulk<gpio::Port::b, 12,6,9> jtagOut;
 extern gpio::Bulk<gpio::Port::a, 5> jtagIn;
+extern gpio::Bulk<gpio::Port::a, 0,1,2,3> uartPins;
 
 struct LineCodingControl : usb::cdcPayload::LineCoding{
     bool isChanged;

@@ -47,6 +47,7 @@ void ClockInit(void) {
     RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
     while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL)
         ;
+    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USART2EN;
     SystemCoreClockUpdate();
 }
 
@@ -82,6 +83,15 @@ static void PortsInit(void) {
                                     gpio::OutputSpeed::_2mhz);
 
     global::jtagIn.configInput<0>(gpio::InputType::floating);
+
+    global::uartPins.clockOn();
+    global::uartPins.write(true, true, true, true);
+    global::uartPins.configInput<0>(gpio::InputType::floating); // CTS
+    global::uartPins.configOutput<1>(gpio::OutputType::alt_pp,
+                                     gpio::OutputSpeed::_10mhz); // RTS
+    global::uartPins.configOutput<2>(gpio::OutputType::alt_pp,
+                                     gpio::OutputSpeed::_10mhz); // TX
+    global::uartPins.configInput<3>(gpio::InputType::floating);  // RX
 }
 
 int main() {
@@ -89,8 +99,21 @@ int main() {
     PortsInit();
     __enable_irq();
     usb::init();
+
     while (1) {
-        __WFI();
+        if (usb::cdcPayload::isPendingApply()) {
+            usb::cdcPayload::applyLineCoding();
+        }
+        auto [data, enabled] = global::uartTx.popSafe();
+        if (enabled) {
+            while ((USART2->SR & USART_SR_TXE_Msk) == 0)
+                ;
+            USART2->DR = data;
+            global::uartRx.push(data);
+        }
+        if(!global::uartRx.empty()){
+            usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,global::uartRx);
+        }
     }
 
     return 0;

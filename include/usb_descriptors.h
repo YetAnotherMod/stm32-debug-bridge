@@ -36,7 +36,7 @@ constexpr std::uint16_t large = 64;
 constexpr std::uint16_t idVendor = 0x1209;
 constexpr std::uint16_t idProduct = 0xfffe;
 
-enum class InterfaceIndex { uart, shell, jtag };
+enum class InterfaceIndex { uart = 0, shell = 2, jtag = 4 };
 
 struct DeviceConfiguration : Configuration {
 
@@ -51,23 +51,23 @@ struct DeviceConfiguration : Configuration {
         Interface data;
         Endpoint dataRxEp;
         Endpoint dataTxEp;
-        constexpr SingleAcm(InterfaceIndex iInd, cdc::serialInd sInd,
-                            EndpointIndex ecInd, EndpointIndex edInd)
-            : iad(static_cast<uint8_t>(iInd) * 2, 2,
+        constexpr SingleAcm(InterfaceIndex iInd, EndpointIndex ecInd,
+                            EndpointIndex edInd, bool realUart)
+            : iad(static_cast<uint8_t>(iInd), 2,
                   static_cast<uint8_t>(Device::Class::comm), cdc::Subclass::acm,
                   cdc::Protocol::protocolDefault,
                   static_cast<uint8_t>(StringIndex::none)),
-              comm(static_cast<uint8_t>(sInd) * 2, 0, 1, Device::Class::comm,
+              comm(static_cast<uint8_t>(iInd), 0, 1, Device::Class::comm,
                    cdc::Subclass::acm, cdc::Protocol::protocolDefault,
                    static_cast<uint8_t>(StringIndex::uartInterfaceName)),
-              header(), mgmt(0, static_cast<uint8_t>(sInd) * 2 + 1),
-              acm(cdc::acmCapability::default_),
-              union_(static_cast<uint8_t>(sInd) * 2,
-                     static_cast<uint8_t>(sInd) * 2 + 1),
+              header(), mgmt(0, static_cast<uint8_t>(iInd) + 1),
+              acm(realUart ? cdc::acmCapability::default_ : 0),
+              union_(static_cast<uint8_t>(iInd),
+                     static_cast<uint8_t>(iInd) + 1),
               commEp(Endpoint::directionIn | static_cast<uint8_t>(ecInd),
-                     Endpoint::EpType::interrupt,
-                     epSize::interrupt, cdc::linesPollingInterval),
-              data(static_cast<uint8_t>(sInd) * 2 + 1, 0, 2,
+                     Endpoint::EpType::interrupt, epSize::interrupt,
+                     cdc::linesPollingInterval),
+              data(static_cast<uint8_t>(iInd) + 1, 0, 2,
                    Device::Class::cdc_data, cdc::Subclass::none,
                    cdc::Protocol::none,
                    static_cast<uint8_t>(StringIndex::none)),
@@ -85,16 +85,17 @@ struct DeviceConfiguration : Configuration {
         : Configuration(sizeof(*this), cdc::numPorts * 2, 1,
                         static_cast<uint8_t>(StringIndex::none),
                         Configuration::bmAttrReserved, 100_ma),
-          uart(InterfaceIndex::uart, cdc::serialInd::uart,
-               EndpointIndex::uartInterrupt, EndpointIndex::uartData),
-          shell(InterfaceIndex::shell, cdc::serialInd::shell,
-                EndpointIndex::shellInterrupt, EndpointIndex::shellData),
-          jtag(InterfaceIndex::jtag, cdc::serialInd::jtag,
-               EndpointIndex::jtagInterrupt, EndpointIndex::jtagData) {}
+          uart(InterfaceIndex::uart, EndpointIndex::uartInterrupt,
+               EndpointIndex::uartData, true),
+          shell(InterfaceIndex::shell, EndpointIndex::shellInterrupt,
+                EndpointIndex::shellData, false),
+          jtag(InterfaceIndex::jtag, EndpointIndex::jtagInterrupt,
+               EndpointIndex::jtagData, false) {}
 
 } __attribute__((packed));
-extern const io::Endpoint endpoints[static_cast<std::size_t>(EndpointIndex::last)];
+extern const io::Endpoint
+    endpoints[static_cast<std::size_t>(EndpointIndex::last)];
 
-uint16_t get(uint16_t wValue, const uint8_t * &payload);
+uint16_t get(uint16_t wValue, const uint8_t *&payload);
 } // namespace descriptor
 } // namespace usb

@@ -30,6 +30,51 @@ struct ControlState {
 
 static ControlState controlState;
 
+namespace epState {
+
+enum class txState : uint16_t {
+    dis = USB_EP_TX_DIS,
+    stall = USB_EP_TX_STALL,
+    nak = USB_EP_TX_NAK,
+    valid = USB_EP_TX_VALID
+};
+enum class rxState : uint16_t {
+    dis = USB_EP_RX_DIS,
+    stall = USB_EP_RX_STALL,
+    nak = USB_EP_RX_NAK,
+    valid = USB_EP_RX_VALID
+};
+
+static inline void setRx(descriptor::EndpointIndex epNum, rxState state){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto epReg_ = epReg;
+    epReg = ((epReg_ ^ static_cast<uint16_t>(state)) &
+                (USB_EPREG_MASK | USB_EPRX_STAT_Msk)) |
+            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+}
+
+static inline rxState getRx(descriptor::EndpointIndex epNum){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto state = epReg & USB_EPRX_STAT_Msk;
+    return static_cast<rxState>(state);
+}
+
+static inline void setTx(descriptor::EndpointIndex epNum, txState state){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto epReg_ = epReg;
+    epReg = ((epReg_ ^ static_cast<uint16_t>(state)) &
+                (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
+            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+}
+
+static inline txState getTx(descriptor::EndpointIndex epNum){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto state = epReg & USB_EPTX_STAT_Msk;
+    return static_cast<txState>(state);
+}
+
+} // namespace epState
+
 static inline void endpointSetStall(descriptor::EndpointIndex epNum,
                                     descriptor::Endpoint::Direction dir,
                                     bool stall) {
@@ -37,31 +82,19 @@ static inline void endpointSetStall(descriptor::EndpointIndex epNum,
     auto epReg_ = epReg;
     if ((epReg_ & USB_EP_T_FIELD) != USB_EP_ISOCHRONOUS) {
         if (dir == descriptor::Endpoint::Direction::in) {
-            if ((epReg_ & USB_EPTX_STAT_Msk) != USB_EP_TX_DIS) {
+            if (epState::getTx(epNum) != epState::txState::dis) {
                 if (stall) {
-                    epReg = ((epReg_ ^ USB_EP_TX_STALL) &
-                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
-                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                    epState::setTx(epNum,epState::txState::stall);
                 } else {
-                    epReg = ((epReg_ ^ USB_EP_TX_NAK) &
-                             (USB_EPREG_MASK | USB_EPTX_STAT_Msk |
-                              USB_EP_DTOG_TX)) |
-                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                    epState::setTx(epNum,epState::txState::nak);
                 }
             }
         } else {
-            if ((epReg_ & USB_EPRX_STAT_Msk) != USB_EP_RX_DIS) {
+            if (epState::getRx(epNum) != epState::rxState::dis) {
                 if (stall) {
-                    epReg = ((epReg_ ^ USB_EP_RX_STALL) &
-                             (USB_EPREG_MASK | USB_EPRX_STAT_Msk)) |
-                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                    epState::setRx(epNum,epState::rxState::stall);
                 } else {
-                    // TODO: судя по всему, опечатка, т.к. иначе мы в результате
-                    // ((xor) and) всегда получаем 0
-                    epReg = ((epReg_ ^ USB_EP_RX_VALID) &
-                             (USB_EPREG_MASK | USB_EPRX_STAT_Msk |
-                              USB_EP_DTOG_RX)) |
-                            (USB_EP_CTR_RX | USB_EP_CTR_TX);
+                    epState::setRx(epNum,epState::rxState::valid);
                 }
             }
         }
@@ -69,11 +102,10 @@ static inline void endpointSetStall(descriptor::EndpointIndex epNum,
 }
 static inline bool endpointGetStall(descriptor::EndpointIndex epNum,
                                     descriptor::Endpoint::Direction dir) {
-    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     if (dir == descriptor::Endpoint::Direction::in) {
-        return (epReg & USB_EPTX_STAT_Msk) == USB_EP_TX_STALL;
+        return (epState::getTx(epNum) == epState::txState::stall);
     }
-    return (epReg & USB_EPRX_STAT_Msk) == USB_EP_RX_STALL;
+    return (epState::getRx(epNum) == epState::rxState::stall);
 }
 
 static volatile io::bTableEntity *const bTable =
@@ -105,9 +137,7 @@ static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     if (epBytesCount % 2) {
         *reinterpret_cast<uint8_t *>(bufP) = static_cast<uint8_t>(epBuf->data);
     }
-    io::epRegs(epNum_) = ((io::epRegs(epNum_) ^ USB_EP_RX_VALID) &
-                          (USB_EPREG_MASK | USB_EPRX_STAT)) |
-                         (USB_EP_CTR_RX | USB_EP_CTR_TX);
+    epState::setRx(epNum,epState::rxState::valid);
     return epBytesCount;
 }
 
@@ -124,14 +154,12 @@ static size_t write(descriptor::EndpointIndex epNum, const void *buf,
         (epBuf++)->data = *bufP++;
     }
     bTable[epNum_].txCount = count;
-    io::epRegs(epNum_) = ((io::epRegs(epNum_) ^ USB_EP_TX_VALID) &
-                          (USB_EPREG_MASK | USB_EPTX_STAT)) |
-                         (USB_EP_CTR_RX | USB_EP_CTR_TX);
+    epState::setTx(epNum,epState::txState::valid);
     return count;
 }
 
 size_t readToFifo(descriptor::EndpointIndex epNum,
-                  fifo::Fifo<uint8_t, global::cdcFifoLenRx> data) {
+                  fifo::Fifo<uint8_t, global::cdcFifoLenRx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     const io::pBufferData *epBuf = rxBuf(epNum_);
     const uint16_t rxCount = bTable[epNum_].rxCount;
@@ -146,11 +174,12 @@ size_t readToFifo(descriptor::EndpointIndex epNum,
     if (epBytesCount % 2) {
         data.push(epBuf->data);
     }
+    epState::setRx(epNum,epState::rxState::valid);
     return epBytesCount;
 }
 
 size_t writeFromFifo(descriptor::EndpointIndex epNum,
-                     fifo::Fifo<uint8_t, global::cdcFifoLenTx> data) {
+                     fifo::Fifo<uint8_t, global::cdcFifoLenTx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     size_t count =
         std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
@@ -163,9 +192,7 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
         epBuf->data = data.pop();
     }
     bTable[epNum_].txCount = count;
-    io::epRegs(epNum_) = ((io::epRegs(epNum_) ^ USB_EP_TX_VALID) &
-                          (USB_EPREG_MASK | USB_EPTX_STAT)) |
-                         (USB_EP_CTR_RX | USB_EP_CTR_TX);
+    epState::setTx(epNum,epState::txState::valid);
     return count;
 }
 
@@ -193,11 +220,7 @@ static status processRequest() {
                         static_cast<void *>(controlState.setup.payload));
                 if (controlState.setup.wLength ==
                     sizeof(cdcPayload::LineCoding)) {
-                    bool dryRun = false;
-                    if (!global::uartTx.isEmpty()) {
-                        dryRun = true;
-                    }
-                    if (cdcPayload::setLineCoding(lineCoding, dryRun)) {
+                    if (cdcPayload::setLineCoding(lineCoding)) {
                         return status::ack;
                     }
                 }
@@ -300,10 +323,10 @@ static status processRequest() {
 }
 
 static inline void epStall() {
-    endpointSetStall(descriptor::EndpointIndex::control,
-                     descriptor::Endpoint::Direction::out, true);
-    endpointSetStall(descriptor::EndpointIndex::control,
-                     descriptor::Endpoint::Direction::in, true);
+    epState::setTx(descriptor::EndpointIndex::control,
+                     epState::txState::stall);
+    epState::setRx(descriptor::EndpointIndex::control,
+                     epState::rxState::stall);
     controlState.state = ControlState::State::idle;
 }
 void setAddr() {
@@ -316,9 +339,8 @@ void txDispatch() {
     switch (controlState.state) {
     case ControlState::State::tx:
     case ControlState::State::txZlp:
-        bytesSent =
-            write(descriptor::EndpointIndex::control,
-                  controlState.payloadTx, controlState.payloadLeft);
+        bytesSent = write(descriptor::EndpointIndex::control,
+                          controlState.payloadTx, controlState.payloadLeft);
         controlState.payloadTx += bytesSent;
         controlState.payloadLeft -= bytesSent;
         if (controlState.payloadLeft == 0) {
@@ -423,7 +445,9 @@ void controlSetupHandler() {
     control::rxDispatch();
 }
 
-void uartRxHandler() { ; }
+void uartRxHandler() {
+    readToFifo(descriptor::EndpointIndex::uartData, global::uartTx);
+}
 void uartTxHandler() { ; }
 void uartInterruptHandler() { ; }
 
@@ -476,9 +500,9 @@ void init(void) {
 
     USB->CNTR = USB_CNTR_RESETM;
 
-    global::usbPins.configOutput<0>(gpio::OutputType::alt_od,
+    global::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
                                     gpio::OutputSpeed::_50mhz);
-    global::usbPins.configOutput<1>(gpio::OutputType::alt_od,
+    global::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
                                     gpio::OutputSpeed::_50mhz);
 }
 
@@ -518,10 +542,53 @@ void reset(void) {
         USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM | USB_CNTR_WKUPM;
     USB->DADDR = USB_DADDR_EF;
 }
+
+
+static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind){
+    switch (ind)
+    {
+    case descriptor::InterfaceIndex::uart:
+        return epState::getTx(descriptor::EndpointIndex::uartData) == epState::txState::nak;
+        break;
+    case descriptor::InterfaceIndex::shell:
+        return epState::getTx(descriptor::EndpointIndex::shellData) == epState::txState::nak;
+        break;
+    case descriptor::InterfaceIndex::jtag:
+        return epState::getTx(descriptor::EndpointIndex::jtagData) == epState::txState::nak;
+        break;
+    default:
+        return false;
+        break;
+    }
+}
+
+bool sendFromFifo(descriptor::InterfaceIndex ind, fifo::Fifo<std::uint8_t, global::cdcFifoLenRx> &buf){
+    if (isAcmReadyToSend(ind)){
+        descriptor::EndpointIndex ep = [](descriptor::InterfaceIndex ind){
+            switch (ind)
+            {
+            case descriptor::InterfaceIndex::uart:
+                return descriptor::EndpointIndex::uartData;
+
+            case descriptor::InterfaceIndex::shell:
+                return descriptor::EndpointIndex::shellData;
+
+            case descriptor::InterfaceIndex::jtag:
+                return descriptor::EndpointIndex::jtagData;
+            
+            default:
+                return descriptor::EndpointIndex::last;
+            }
+        }(ind);
+        writeFromFifo(ep,buf);
+        return true;
+    }
+    return false;
+}
+
 } // namespace usb
 extern "C" void USB_LP_IRQHandler() {
     global::led.writeLow();
-    volatile static uint16_t epregs[8];
     using usb::descriptor::endpoints;
     uint16_t istr = USB->ISTR;
     if (istr & USB_ISTR_CTR) {
@@ -529,7 +596,7 @@ extern "C" void USB_LP_IRQHandler() {
         auto epReg = usb::io::epRegs(epNum);
         usb::io::epRegs(epNum) = epReg & (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk |
                                           USB_EPADDR_FIELD_Msk);
-        epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk );
+        epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk);
         if (epReg & USB_EP_CTR_TX) {
             if (endpoints[epNum].txHandler) {
                 endpoints[epNum].txHandler();
@@ -546,14 +613,6 @@ extern "C" void USB_LP_IRQHandler() {
     } else if (istr & USB_ISTR_RESET) {
         USB->ISTR = (uint16_t)(~USB_ISTR_RESET);
         usb::reset();
-        epregs[0] = USB->EP0R;
-        epregs[1] = USB->EP1R;
-        epregs[2] = USB->EP2R;
-        epregs[3] = USB->EP3R;
-        epregs[4] = USB->EP4R;
-        epregs[5] = USB->EP5R;
-        epregs[6] = USB->EP6R;
-        epregs[7] = USB->EP7R;
     } else if (istr & USB_ISTR_SUSP) {
         USB->ISTR = (uint16_t)(~USB_ISTR_SUSP);
         USB->CNTR = USB->CNTR | USB_CNTR_FSUSP;

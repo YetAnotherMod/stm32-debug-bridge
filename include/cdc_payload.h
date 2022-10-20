@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace usb {
-namespace cdcPayload{
+namespace cdcPayload {
 
 namespace lineState {
 constexpr std::uint16_t dtr = 0x01;
@@ -23,14 +23,11 @@ enum class CharFormat : std::uint8_t { stopBit1, stopBit1p5, stopBit2, last };
 enum class ParityType : std::uint8_t { none, odd, even, mark, space, last };
 
 enum class DataBits : std::uint8_t {
-    bits5 = 5,
-    bits6 = 6,
-    bits7 = 7,
     bits8 = 8,
-    bit16 = 16,
+    bits9 = 9,
 };
 
-struct LineCoding{
+struct LineCoding {
     std::uint32_t dwDTERate;
     CharFormat bCharFormat;
     ParityType bParityType;
@@ -40,9 +37,13 @@ struct LineCoding{
 static_assert(sizeof(LineCoding) == 7);
 static_assert(alignof(LineCoding) == 1);
 
-void setControlLineState (uint16_t v);
+void setControlLineState(uint16_t v);
 
-bool setLineCoding(const LineCoding *, bool dryRun);
+bool setLineCoding(const LineCoding *v);
 
-}
-}
+void applyLineCoding();
+
+bool isPendingApply();
+
+} // namespace cdcPayload
+} // namespace usb

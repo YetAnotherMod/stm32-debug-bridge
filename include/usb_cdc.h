@@ -66,7 +66,6 @@ enum class pin {
 constexpr std::uint8_t numPorts = 3;
 constexpr std::size_t bufSize = 0x400;
 constexpr std::size_t linesPollingInterval = 20;
-enum class serialInd { uart = 0, shell = 1, jtag = 2 };
 namespace descriptor {
 
 enum class Subtype : std::uint8_t {
