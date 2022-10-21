@@ -120,7 +120,7 @@ void applyLineCoding() {
 
     USART2->CR1 = cr1 | USART_CR1_UE;
 
-    void setControlLineState(uint16_t v);
+    setControlLineState(controlLineState);
 
     // конец функции
     pendingApply = false;
