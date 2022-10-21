@@ -45,29 +45,29 @@ enum class rxState : uint16_t {
     valid = USB_EP_RX_VALID
 };
 
-static inline void setRx(descriptor::EndpointIndex epNum, rxState state){
+static inline void setRx(descriptor::EndpointIndex epNum, rxState state) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto epReg_ = epReg;
     epReg = ((epReg_ ^ static_cast<uint16_t>(state)) &
-                (USB_EPREG_MASK | USB_EPRX_STAT_Msk)) |
+             (USB_EPREG_MASK | USB_EPRX_STAT_Msk)) |
             (USB_EP_CTR_RX | USB_EP_CTR_TX);
 }
 
-static inline rxState getRx(descriptor::EndpointIndex epNum){
+static inline rxState getRx(descriptor::EndpointIndex epNum) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto state = epReg & USB_EPRX_STAT_Msk;
     return static_cast<rxState>(state);
 }
 
-static inline void setTx(descriptor::EndpointIndex epNum, txState state){
+static inline void setTx(descriptor::EndpointIndex epNum, txState state) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto epReg_ = epReg;
     epReg = ((epReg_ ^ static_cast<uint16_t>(state)) &
-                (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
+             (USB_EPREG_MASK | USB_EPTX_STAT_Msk)) |
             (USB_EP_CTR_RX | USB_EP_CTR_TX);
 }
 
-static inline txState getTx(descriptor::EndpointIndex epNum){
+static inline txState getTx(descriptor::EndpointIndex epNum) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto state = epReg & USB_EPTX_STAT_Msk;
     return static_cast<txState>(state);
@@ -84,17 +84,17 @@ static inline void endpointSetStall(descriptor::EndpointIndex epNum,
         if (dir == descriptor::Endpoint::Direction::in) {
             if (epState::getTx(epNum) != epState::txState::dis) {
                 if (stall) {
-                    epState::setTx(epNum,epState::txState::stall);
+                    epState::setTx(epNum, epState::txState::stall);
                 } else {
-                    epState::setTx(epNum,epState::txState::nak);
+                    epState::setTx(epNum, epState::txState::nak);
                 }
             }
         } else {
             if (epState::getRx(epNum) != epState::rxState::dis) {
                 if (stall) {
-                    epState::setRx(epNum,epState::rxState::stall);
+                    epState::setRx(epNum, epState::rxState::stall);
                 } else {
-                    epState::setRx(epNum,epState::rxState::valid);
+                    epState::setRx(epNum, epState::rxState::valid);
                 }
             }
         }
@@ -137,7 +137,7 @@ static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     if (epBytesCount % 2) {
         *reinterpret_cast<uint8_t *>(bufP) = static_cast<uint8_t>(epBuf->data);
     }
-    epState::setRx(epNum,epState::rxState::valid);
+    epState::setRx(epNum, epState::rxState::valid);
     return epBytesCount;
 }
 
@@ -154,16 +154,20 @@ static size_t write(descriptor::EndpointIndex epNum, const void *buf,
         (epBuf++)->data = *bufP++;
     }
     bTable[epNum_].txCount = count;
-    epState::setTx(epNum,epState::txState::valid);
+    epState::setTx(epNum, epState::txState::valid);
     return count;
 }
 
-size_t readToFifo(descriptor::EndpointIndex epNum,
-                  fifo::Fifo<uint8_t, global::cdcFifoLenRx> &data) {
+static size_t readToFifo(descriptor::EndpointIndex epNum,
+                         fifo::Fifo<uint8_t, global::cdcFifoLenTx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     const io::pBufferData *epBuf = rxBuf(epNum_);
     const uint16_t rxCount = bTable[epNum_].rxCount;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
+
+    if (epBytesCount > global::cdcFifoLenTx - data.size()) {
+        return 0;
+    }
 
     bTable[epNum_].rxCount =
         rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
@@ -174,12 +178,12 @@ size_t readToFifo(descriptor::EndpointIndex epNum,
     if (epBytesCount % 2) {
         data.push(epBuf->data);
     }
-    epState::setRx(epNum,epState::rxState::valid);
+    epState::setRx(epNum, epState::rxState::valid);
     return epBytesCount;
 }
 
 size_t writeFromFifo(descriptor::EndpointIndex epNum,
-                     fifo::Fifo<uint8_t, global::cdcFifoLenTx> &data) {
+                     fifo::Fifo<uint8_t, global::cdcFifoLenRx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     size_t count =
         std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
@@ -192,7 +196,7 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
         epBuf->data = data.pop();
     }
     bTable[epNum_].txCount = count;
-    epState::setTx(epNum,epState::txState::valid);
+    epState::setTx(epNum, epState::txState::valid);
     return count;
 }
 
@@ -323,10 +327,8 @@ static status processRequest() {
 }
 
 static inline void epStall() {
-    epState::setTx(descriptor::EndpointIndex::control,
-                     epState::txState::stall);
-    epState::setRx(descriptor::EndpointIndex::control,
-                     epState::rxState::stall);
+    epState::setTx(descriptor::EndpointIndex::control, epState::txState::stall);
+    epState::setRx(descriptor::EndpointIndex::control, epState::rxState::stall);
     controlState.state = ControlState::State::idle;
 }
 void setAddr() {
@@ -543,18 +545,19 @@ void reset(void) {
     USB->DADDR = USB_DADDR_EF;
 }
 
-
-static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind){
-    switch (ind)
-    {
+static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind) {
+    switch (ind) {
     case descriptor::InterfaceIndex::uart:
-        return epState::getTx(descriptor::EndpointIndex::uartData) == epState::txState::nak;
+        return epState::getTx(descriptor::EndpointIndex::uartData) ==
+               epState::txState::nak;
         break;
     case descriptor::InterfaceIndex::shell:
-        return epState::getTx(descriptor::EndpointIndex::shellData) == epState::txState::nak;
+        return epState::getTx(descriptor::EndpointIndex::shellData) ==
+               epState::txState::nak;
         break;
     case descriptor::InterfaceIndex::jtag:
-        return epState::getTx(descriptor::EndpointIndex::jtagData) == epState::txState::nak;
+        return epState::getTx(descriptor::EndpointIndex::jtagData) ==
+               epState::txState::nak;
         break;
     default:
         return false;
@@ -562,11 +565,11 @@ static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind){
     }
 }
 
-bool sendFromFifo(descriptor::InterfaceIndex ind, fifo::Fifo<std::uint8_t, global::cdcFifoLenRx> &buf){
-    if (isAcmReadyToSend(ind)){
-        descriptor::EndpointIndex ep = [](descriptor::InterfaceIndex ind){
-            switch (ind)
-            {
+bool sendFromFifo(descriptor::InterfaceIndex ind,
+                  fifo::Fifo<std::uint8_t, global::cdcFifoLenRx> &buf) {
+    if (isAcmReadyToSend(ind)) {
+        descriptor::EndpointIndex ep = [](descriptor::InterfaceIndex ind) {
+            switch (ind) {
             case descriptor::InterfaceIndex::uart:
                 return descriptor::EndpointIndex::uartData;
 
@@ -575,12 +578,12 @@ bool sendFromFifo(descriptor::InterfaceIndex ind, fifo::Fifo<std::uint8_t, globa
 
             case descriptor::InterfaceIndex::jtag:
                 return descriptor::EndpointIndex::jtagData;
-            
+
             default:
                 return descriptor::EndpointIndex::last;
             }
         }(ind);
-        writeFromFifo(ep,buf);
+        writeFromFifo(ep, buf);
         return true;
     }
     return false;

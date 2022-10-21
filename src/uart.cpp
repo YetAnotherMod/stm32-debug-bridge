@@ -29,8 +29,7 @@ bool setLineCoding(const LineCoding *v) {
         (USART_BRR_DIV_Fraction_Msk | USART_BRR_DIV_Mantissa_Msk) * 995 / 500;
     constexpr uint32_t maxBrr = maxBrr2 / 2 + maxBrr2 % 2;
 
-    if ((v->bDataBits != DataBits::bits8) &&
-        (v->bDataBits != DataBits::bits9)) {
+    if ((v->bDataBits != DataBits::bits8)) {
         return false;
     }
     if (v->bCharFormat >= CharFormat::last) {
@@ -82,16 +81,16 @@ void applyLineCoding() {
 
     USART2->BRR = brr;
 
-    if (lineCoding.bDataBits == DataBits::bits9) {
-        cr1 |= USART_CR1_M;
-    }
-
     if (lineCoding.bParityType == ParityType::odd ||
         lineCoding.bParityType == ParityType::even) {
         cr1 |= USART_CR1_PCE;
         if (lineCoding.bParityType == ParityType::odd) {
             cr1 |= USART_CR1_PS;
         }
+    }
+
+    if (lineCoding.bParityType == ParityType::space) {
+        cr1 |= USART_CR1_M;
     }
 
     uint32_t cr2 = [](CharFormat x) {
@@ -106,16 +105,22 @@ void applyLineCoding() {
         }
     }(lineCoding.bCharFormat);
 
-    uint32_t cr3 = 0;
+    uint32_t cr3 = USART_CR3_CTSE | USART_CR3_RTSE;
 
     USART2->CR1 = cr1;
     USART2->CR2 = cr2;
     USART2->CR3 = cr3;
 
+    // корректировка dwDTERate в соответствии с точным значением
+
     lineCoding.dwDTERate = SystemCoreClock * 2 / brr;
     lineCoding.dwDTERate = lineCoding.dwDTERate / 2 + lineCoding.dwDTERate % 2;
 
+    // включение uart
+
     USART2->CR1 = cr1 | USART_CR1_UE;
+
+    void setControlLineState(uint16_t v);
 
     // конец функции
     pendingApply = false;

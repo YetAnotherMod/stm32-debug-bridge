@@ -22,10 +22,7 @@ enum class CharFormat : std::uint8_t { stopBit1, stopBit1p5, stopBit2, last };
 
 enum class ParityType : std::uint8_t { none, odd, even, mark, space, last };
 
-enum class DataBits : std::uint8_t {
-    bits8 = 8,
-    bits9 = 9,
-};
+enum class DataBits : std::uint8_t { bits8 = 8 };
 
 struct LineCoding {
     std::uint32_t dwDTERate;

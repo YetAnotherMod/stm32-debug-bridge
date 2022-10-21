@@ -85,13 +85,13 @@ static void PortsInit(void) {
     global::jtagIn.configInput<0>(gpio::InputType::floating);
 
     global::uartPins.clockOn();
-    global::uartPins.write(true, true, true, true);
-    global::uartPins.configInput<0>(gpio::InputType::floating); // CTS
+    global::uartPins.write(false, true, true, true);
+    global::uartPins.configInput<0>(gpio::InputType::pull_up_down); // CTS
     global::uartPins.configOutput<1>(gpio::OutputType::alt_pp,
                                      gpio::OutputSpeed::_10mhz); // RTS
     global::uartPins.configOutput<2>(gpio::OutputType::alt_pp,
-                                     gpio::OutputSpeed::_10mhz); // TX
-    global::uartPins.configInput<3>(gpio::InputType::floating);  // RX
+                                     gpio::OutputSpeed::_10mhz);    // TX
+    global::uartPins.configInput<3>(gpio::InputType::pull_up_down); // RX
 }
 
 int main() {
@@ -111,8 +111,9 @@ int main() {
             USART2->DR = data;
             global::uartRx.push(data);
         }
-        if(!global::uartRx.empty()){
-            usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,global::uartRx);
+        if (!global::uartRx.empty()) {
+            usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,
+                              global::uartRx);
         }
     }
 
