@@ -11,12 +11,14 @@ link_libraries(pthread)
 
 add_executable(fifo fifo.cpp)
 add_executable(fifo2 fifo2.cpp)
+add_executable(fifo3 fifo3.cpp)
 add_executable(static_map static_map.cpp)
 
 include(CTest)
 
 add_test(fifo fifo)
 add_test(fifo2 fifo2)
+add_test(fifo3 fifo3)
 add_test(static_map static_map)
 
 if(NOT REPORT_PATH)

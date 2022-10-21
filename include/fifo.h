@@ -23,6 +23,13 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
     bool isEmpty(void) const { return tail_ == head_; }
     bool empty(void) const { return isEmpty(); }
     bool isFull(void) const { return size() == N; }
+    SizeType capacity(void) { return N; }
+    void clear(void) {
+        head_ = 0;
+        tail_ = 0;
+    }
+    void drop(SizeType len) { head_ += len; }
+    void occupy(SizeType len) { tail_ += len; }
     void push(DataType v) requires(std::movable<DataType>) {
         SizeType t = tail_;
         data_[t % N] = std::move(v);
@@ -44,9 +51,10 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         return toPlace;
     }
     SizeType write(const DataType *v, SizeType count) requires(
-        std::constructible_from<DataType, const DataType &> &&std::convertible_to<
-            const DataType &, DataType> &&std::constructible_from<DataType, const DataType>
-            &&std::convertible_to<const DataType, DataType>) {
+        std::constructible_from<DataType, const DataType &>
+            &&std::convertible_to<const DataType &, DataType>
+                &&std::constructible_from<DataType, const DataType>
+                    &&std::convertible_to<const DataType, DataType>) {
         SizeType t = tail_;
         SizeType toPlace = std::min(count, static_cast<SizeType>(N - size()));
         for (SizeType left = toPlace; left > 0; --left) {
@@ -101,15 +109,32 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         push(std::move(v));
         return true;
     }
-    struct SafeReturnType {
+    struct PopSafeReturnType {
         DataType data;
         bool result;
     };
-    SafeReturnType popSafe() {
+    PopSafeReturnType popSafe() {
         if (isEmpty()) {
             return {DataType(), false};
         }
         return {pop(), true};
+    }
+    struct DmaReturnType{
+        DataType *addr;
+        SizeType len;
+    };
+    DmaReturnType dmaPop(void) requires(std::copyable<DataType>){
+        return {&data_[head_%N],std::min(static_cast<SizeType>(N-head_%N),size())};
+    }
+    void dmaPopApply(SizeType len){
+        drop(len);
+    }
+    DmaReturnType dmaPush(SizeType len) requires(std::copyable<DataType>){
+        SizeType len_ = std::min(std::min(static_cast<SizeType>(N-tail_%N),len),static_cast<SizeType>(N-size()));
+        return {&data_[tail_%N],len_};
+    }
+    void dmaPushApply(SizeType len){
+        occupy(len);
     }
 };
 } // namespace internal
