@@ -174,5 +174,64 @@ int main() {
             result = 1;
         }
     }
+    if (result) {
+        return result;
+    }
+    std::cout << "Test write and read single\n";
+    for (std::size_t i = 0; i < circles; ++i) {
+        for (std::uint8_t j = 0; j < len; j++) {
+            std::unique_ptr<std::uint16_t> x =
+                std::make_unique<std::uint16_t>(j);
+            buf.write(&x, 1);
+            buf.read(&x, 1);
+            if (*x != j) {
+                std::cout << "iteration " << i << ":" << j << "read bad data\n";
+                result = 1;
+            }
+        }
+    }
+    if (result) {
+        return result;
+    }
+    std::cout << "Write and read 3 elements\n";
+    {
+        std::unique_ptr<std::uint16_t> x[3];
+        buf.write(x,3);
+        buf.read(x,3);
+    }
+    std::cout << "Test write and read single packs\n";
+    for (std::size_t i = 0; i < circles; ++i) {
+        std::unique_ptr<std::uint16_t> x[len + 3];
+        for (std::uint8_t j = 0; j < len + 3; j++) {
+            x[j] = std::make_unique<std::uint16_t>(j);
+        }
+        auto count = buf.write(x, len + 3);
+        if (count != len) {
+            std::cout << "iteration " << i << " bad write len: " << count << "\n";
+            result = 1;
+        }
+        if (!(x[len] && x[len + 1] && x[len + 2])) {
+            std::cout << "iteration " << i << " not written data damaged: "
+                      << static_cast<bool>(x[len]) << " "
+                      << static_cast<bool>(x[len + 1]) << " "
+                      << static_cast<bool>(x[len + 2]) << "\n";
+            result = 1;
+        }
+        count = buf.read(x,len+3);
+        if (count != len) {
+            std::cout << "iteration " << i << " bad read len: " << count << "\n";
+            result = 1;
+        }
+        for (std::uint8_t j = 0; j < len+3; ++j){
+            if (!(x[j])){
+                std::cout << "iteration " << i << ":" << j << " ptr empty\n";
+                result = 1;
+            }
+            if (*(x[j])!=j){
+                std::cout << "iteration " << i << ":" << j << " bad data: " << *(x[j]) << "\n";
+                result = 1;
+            }
+        }
+    }
     return result;
 }
