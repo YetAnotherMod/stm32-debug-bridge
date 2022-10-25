@@ -11,6 +11,9 @@ extern "C" void __terminate();
 
 namespace usb {
 
+constexpr uint16_t istrMAsk = USB_ISTR_CTR | USB_ISTR_RESET | USB_ISTR_SUSP |
+                              USB_ISTR_WKUP | USB_ISTR_DIR | USB_ISTR_EP_ID_Msk;
+
 struct DeviceState {
     enum class State { reset = 0x00, addressSet = 0x01, configured = 0x02 };
     State state;
@@ -165,7 +168,7 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
     const uint16_t rxCount = bTable[epNum_].rxCount;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
 
-    if (epBytesCount > global::cdcFifoLenTx - data.size()) {
+    if (epBytesCount > data.capacity() - data.size()) {
         return 0;
     }
 
@@ -178,7 +181,6 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
     if (epBytesCount % 2) {
         data.push(epBuf->data);
     }
-    epState::setRx(epNum, epState::rxState::valid);
     return epBytesCount;
 }
 
@@ -448,18 +450,46 @@ void controlSetupHandler() {
 }
 
 void uartRxHandler() {
-    readToFifo(descriptor::EndpointIndex::uartData, global::uartTx);
+    if (!cdcPayload::isPendingApply()) {
+        readToFifo(descriptor::EndpointIndex::uartData, global::uartTx);
+    }
 }
+
 void uartTxHandler() { ; }
 void uartInterruptHandler() { ; }
 
-void shellRxHandler() { ; }
+void shellRxHandler() {
+    readToFifo(descriptor::EndpointIndex::shellData, global::shellTx);
+}
 void shellTxHandler() { ; }
 void shellInterruptHandler() { ; }
 
-void jtagRxHandler() { ; }
+void jtagRxHandler() {
+    readToFifo(descriptor::EndpointIndex::jtagData, global::jtagTx);
+}
 void jtagTxHandler() { ; }
 void jtagInterruptHandler() { ; }
+
+void regenerateTx(void) {
+    if (auto epNum = descriptor::EndpointIndex::uartData;
+        epState::getRx(epNum) == epState::rxState::nak &&
+        ((global::uartTx.capacity() - global::uartTx.size()) >=
+         descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
+        epState::setRx(epNum, epState::rxState::valid);
+    }
+    if (auto epNum = descriptor::EndpointIndex::shellData;
+        epState::getRx(epNum) == epState::rxState::nak &&
+        ((global::shellTx.capacity() - global::shellTx.size()) >=
+         descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
+        epState::setRx(epNum, epState::rxState::valid);
+    }
+    if (auto epNum = descriptor::EndpointIndex::jtagData;
+        epState::getRx(epNum) == epState::rxState::nak &&
+        ((global::jtagTx.capacity() - global::jtagTx.size()) >=
+         descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
+        epState::setRx(epNum, epState::rxState::valid);
+    }
+}
 
 constexpr uint16_t convertEpType(descriptor::Endpoint::EpType t) {
     uint16_t epType = 0;
@@ -589,42 +619,47 @@ bool sendFromFifo(descriptor::InterfaceIndex ind,
     return false;
 }
 
+void polling(void) {
+    using usb::descriptor::endpoints;
+    uint16_t istr = USB->ISTR & istrMAsk;
+    if (istr != 0) {
+        global::led.writeLow();
+        if (istr & USB_ISTR_CTR) {
+            uint16_t epNum = (istr & USB_ISTR_EP_ID_Msk) >> USB_ISTR_EP_ID_Pos;
+            auto epReg = usb::io::epRegs(epNum);
+            usb::io::epRegs(epNum) =
+                epReg &
+                (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk | USB_EPADDR_FIELD_Msk);
+            epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk);
+            if (epReg & USB_EP_CTR_TX) {
+                if (endpoints[epNum].txHandler) {
+                    endpoints[epNum].txHandler();
+                }
+            } else if (epReg & USB_EP_SETUP) {
+                if (endpoints[epNum].setupHandler) {
+                    endpoints[epNum].setupHandler();
+                }
+            } else {
+                if (endpoints[epNum].rxHandler) {
+                    endpoints[epNum].rxHandler();
+                }
+            }
+        } else if (istr & USB_ISTR_RESET) {
+            USB->ISTR = (uint16_t)(~USB_ISTR_RESET);
+            usb::reset();
+        } else if (istr & USB_ISTR_SUSP) {
+            USB->ISTR = (uint16_t)(~USB_ISTR_SUSP);
+            USB->CNTR = USB->CNTR | USB_CNTR_FSUSP;
+            USB->DADDR = USB_DADDR_EF;
+        } else if (istr & USB_ISTR_WKUP) {
+            USB->ISTR = (uint16_t)(~USB_ISTR_WKUP);
+            USB->CNTR = USB->CNTR & ~USB_CNTR_FSUSP;
+        }
+        global::led.writeHigh();
+    }
+}
+
 } // namespace usb
 extern "C" void USB_LP_IRQHandler() {
-    global::led.writeLow();
-    using usb::descriptor::endpoints;
-    uint16_t istr = USB->ISTR;
-    if (istr & USB_ISTR_CTR) {
-        uint16_t epNum = (istr & USB_ISTR_EP_ID_Msk) >> USB_ISTR_EP_ID_Pos;
-        auto epReg = usb::io::epRegs(epNum);
-        usb::io::epRegs(epNum) = epReg & (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk |
-                                          USB_EPADDR_FIELD_Msk);
-        epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk);
-        if (epReg & USB_EP_CTR_TX) {
-            if (endpoints[epNum].txHandler) {
-                endpoints[epNum].txHandler();
-            }
-        } else if (epReg & USB_EP_SETUP) {
-            if (endpoints[epNum].setupHandler) {
-                endpoints[epNum].setupHandler();
-            }
-        } else {
-            if (endpoints[epNum].rxHandler) {
-                endpoints[epNum].rxHandler();
-            }
-        }
-    } else if (istr & USB_ISTR_RESET) {
-        USB->ISTR = (uint16_t)(~USB_ISTR_RESET);
-        usb::reset();
-    } else if (istr & USB_ISTR_SUSP) {
-        USB->ISTR = (uint16_t)(~USB_ISTR_SUSP);
-        USB->CNTR = USB->CNTR | USB_CNTR_FSUSP;
-        USB->DADDR = USB_DADDR_EF;
-    } else if (istr & USB_ISTR_WKUP) {
-        USB->ISTR = (uint16_t)(~USB_ISTR_WKUP);
-        USB->CNTR = USB->CNTR & ~USB_CNTR_FSUSP;
-    } else {
-        __terminate();
-    }
-    global::led.writeHigh();
+    usb::polling();
 }

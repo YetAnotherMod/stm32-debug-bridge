@@ -129,8 +129,8 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
     void dmaPopApply(SizeType len){
         drop(len);
     }
-    DmaReturnType dmaPush(SizeType len) requires(std::copyable<DataType>){
-        SizeType len_ = std::min(std::min(static_cast<SizeType>(N-tail_%N),len),static_cast<SizeType>(N-size()));
+    DmaReturnType dmaPush() requires(std::copyable<DataType>){
+        SizeType len_ = std::min(static_cast<SizeType>(N-tail_%N),static_cast<SizeType>(N-size()));
         return {&data_[tail_%N],len_};
     }
     void dmaPushApply(SizeType len){

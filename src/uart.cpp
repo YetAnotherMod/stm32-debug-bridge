@@ -64,16 +64,7 @@ void applyLineCoding() {
 
     // дожидаемся окончания работы UART. Предполагаем, если 3 чтения подряд
     // регистры пусты, то UART закончил работу
-    int counter = 0;
-    while (counter < 3) {
-        if (((USART2->CR1 & USART_CR1_UE_Msk) != 0) &&
-            ((USART2->SR & (USART_SR_TXE_Msk | USART_SR_RXNE_Msk)) !=
-             USART_SR_TXE)) {
-            counter = 0;
-        } else {
-            counter++;
-        }
-    }
+    while(DMA1_Channel7->CNDTR != 0);
 
     // инициализация UART
     uint32_t cr1 = USART_CR1_TE | USART_CR1_RE;
@@ -105,7 +96,7 @@ void applyLineCoding() {
         }
     }(lineCoding.bCharFormat);
 
-    uint32_t cr3 = USART_CR3_CTSE | USART_CR3_RTSE;
+    uint32_t cr3 = USART_CR3_CTSE | USART_CR3_RTSE | USART_CR3_DMAT | USART_CR3_DMAR;
 
     USART2->CR1 = cr1;
     USART2->CR2 = cr2;

@@ -40,7 +40,7 @@ int main() {
         }
     }
     {
-        auto [p, l] = buf.dmaPush(len);
+        auto [p, l] = buf.dmaPush();
         uint8_t *ret = static_cast<uint8_t *>(static_cast<void *>(p));
         constexpr size_t dataShift =
             (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +
@@ -83,7 +83,7 @@ int main() {
         }
     }
     {
-        auto [p, l] = buf.dmaPush(len);
+        auto [p, l] = buf.dmaPush();
         uint8_t *ret = static_cast<uint8_t *>(static_cast<void *>(p));
         constexpr size_t dataShift =
             (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +

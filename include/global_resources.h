@@ -18,9 +18,6 @@ extern fifo::Fifo<std::uint8_t, cdcFifoLenTx> shellTx;
 extern fifo::Fifo<std::uint8_t, cdcFifoLenRx> jtagRx;
 extern fifo::Fifo<std::uint8_t, cdcFifoLenTx> jtagTx;
 
-extern fifo::Fifo<std::uint32_t, 64> jtagCommands;
-extern fifo::Fifo<bool, 64> jtagResponse;
-
 extern gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
 extern gpio::Pin<gpio::Port::c, 13> led;
 extern gpio::Bulk<gpio::Port::b, 12,6,9> jtagOut;

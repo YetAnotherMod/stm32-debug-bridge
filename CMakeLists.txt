@@ -25,7 +25,10 @@ set (STM32_LDSCRIPT ${STM32CUBE}/Drivers/CMSIS/Device/ST/STM32F1xx/Source/Templa
 add_compile_definitions(STM32F103xB HSE_VALUE=8000000U)
 add_compile_options(-mthumb -mcpu=cortex-m3 -fno-pic)
 add_compile_options(-Wall -Wextra)
-add_compile_options(-O2 -gdwarf-2)
+set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -gdwarf-2")
+set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+set (CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os")
+set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -gdwarf-2")
 set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -std=c++2a)
 
 add_link_options(-mthumb -mcpu=cortex-m3 -T${STM32_LDSCRIPT} --specs=nosys.specs --specs=nano.specs)
