@@ -3,6 +3,7 @@
 
 #include <global_resources.h>
 #include <gpio.h>
+#include <jtag.h>
 #include <usb.h>
 
 void ClockInit(void) {
@@ -47,7 +48,7 @@ void ClockInit(void) {
     RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
     while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL)
         ;
-    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USART2EN;
+    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USART2EN | RCC_APB1ENR_TIM2EN;
     RCC->AHBENR = RCC->AHBENR | RCC_AHBENR_DMA1EN;
     SystemCoreClockUpdate();
 }
@@ -66,7 +67,7 @@ static void PortsInit(void) {
     global::led.clockOn();
     global::led.writeHigh();
     global::led.configOutput(gpio::OutputType::gen_pp,
-                             gpio::OutputSpeed::_2mhz);
+                             gpio::OutputSpeed::_50mhz);
 
     global::usbPins.clockOn();
     global::usbPins.write(false, false);
@@ -77,11 +78,11 @@ static void PortsInit(void) {
     global::jtagOut.clockOn();
     global::jtagOut.write(false, false, false);
     global::jtagOut.configOutput<0>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_10mhz);
+                                    gpio::OutputSpeed::_50mhz);
     global::jtagOut.configOutput<1>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_10mhz);
+                                    gpio::OutputSpeed::_50mhz);
     global::jtagOut.configOutput<2>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_10mhz);
+                                    gpio::OutputSpeed::_50mhz);
 
     global::jtagIn.configInput<0>(gpio::InputType::floating);
 
@@ -91,8 +92,8 @@ static void PortsInit(void) {
     global::uartPins.configOutput<1>(gpio::OutputType::alt_pp,
                                      gpio::OutputSpeed::_50mhz); // RTS
     global::uartPins.configOutput<2>(gpio::OutputType::alt_pp,
-                                     gpio::OutputSpeed::_50mhz);    // TX
-    global::uartPins.configInput<3>(gpio::InputType::floating); // RX
+                                     gpio::OutputSpeed::_50mhz); // TX
+    global::uartPins.configInput<3>(gpio::InputType::floating);  // RX
 }
 
 int main() {
@@ -102,16 +103,28 @@ int main() {
 
     uint32_t lastDmaRxLen = 0;
     uint32_t lastDmaTxLen = 0;
+    uint32_t lastDmaBbTxLen = 0;
     usb::cdcPayload::applyLineCoding();
     {
         auto [addr, len] = global::uartRx.dmaPush();
-            DMA1_Channel6->CNDTR = len;
-            lastDmaRxLen = len;
-            DMA1_Channel6->CMAR = reinterpret_cast<uintptr_t>(addr);
-            DMA1_Channel6->CPAR = reinterpret_cast<uintptr_t>(&USART2->DR);
+        DMA1_Channel6->CNDTR = len;
+        lastDmaRxLen = len;
+        DMA1_Channel6->CMAR = reinterpret_cast<uintptr_t>(addr);
+        DMA1_Channel6->CPAR = reinterpret_cast<uintptr_t>(&USART2->DR);
         DMA1_Channel6->CCR = DMA_CCR_PSIZE_1 | DMA_CCR_MINC | DMA_CCR_PSIZE_1 |
                              DMA_CCR_CIRC | DMA_CCR_EN;
-        }
+    }
+
+    TIM2->CR1 = TIM_CR1_ARPE | TIM_CR1_URS;
+    TIM2->CR2 = TIM_CR2_CCDS;
+    TIM2->SMCR = 0;
+    TIM2->DIER = TIM_DIER_UDE;
+    TIM2->CCMR1 = 0;
+    TIM2->CCMR2 = 0;
+    TIM2->CCER = 0;
+    TIM2->PSC = 0;
+    TIM2->ARR = (SystemCoreClock / 100000) - 1;
+    TIM2->CR1 = TIM_CR1_ARPE | TIM_CR1_URS | TIM_CR1_CEN;
     usb::init();
     while (1) {
         if (usb::cdcPayload::isPendingApply()) {
@@ -126,19 +139,38 @@ int main() {
         if (uint32_t dmaTxLen = DMA1_Channel7->CNDTR;
             (lastDmaTxLen - dmaTxLen != 0) || (!global::uartTx.empty())) {
             if (dmaTxLen == 0) {
-            DMA1_Channel7->CCR = 0;
-            global::uartTx.dmaPopApply(lastDmaTxLen);
+                DMA1_Channel7->CCR = 0;
+                global::uartTx.dmaPopApply(lastDmaTxLen);
                 auto [addr, len] = global::uartTx.dmaPop();
-            DMA1_Channel7->CNDTR = len;
-            lastDmaTxLen = len;
-            DMA1_Channel7->CMAR = reinterpret_cast<uintptr_t>(addr);
-            DMA1_Channel7->CPAR = reinterpret_cast<uintptr_t>(&USART2->DR);
+                DMA1_Channel7->CNDTR = len;
+                lastDmaTxLen = len;
+                DMA1_Channel7->CMAR = reinterpret_cast<uintptr_t>(addr);
+                DMA1_Channel7->CPAR = reinterpret_cast<uintptr_t>(&USART2->DR);
                 DMA1_Channel7->CCR =
                     DMA_CCR_PSIZE_1 | DMA_CCR_MINC | DMA_CCR_DIR | DMA_CCR_EN;
             } else {
                 global::uartTx.dmaPopApply(lastDmaTxLen - dmaTxLen);
                 lastDmaTxLen = dmaTxLen;
+            }
         }
+
+        if (uint32_t dmaTxLen = DMA1_Channel2->CNDTR;
+            (lastDmaBbTxLen - dmaTxLen != 0) || (!global::bbTx.empty())) {
+            if (dmaTxLen == 0) {
+                DMA1_Channel2->CCR = 0;
+                global::bbTx.dmaPopApply(lastDmaBbTxLen);
+                auto [addr, len] = global::bbTx.dmaPop();
+                DMA1_Channel2->CNDTR = len;
+                lastDmaBbTxLen = len;
+                DMA1_Channel2->CMAR = reinterpret_cast<uintptr_t>(addr);
+                DMA1_Channel2->CPAR = reinterpret_cast<uintptr_t>(
+                    &(global::jtagOut.getGpioPointer()->BSRR));
+                DMA1_Channel2->CCR = DMA_CCR_MSIZE_1 | DMA_CCR_PSIZE_1 |
+                                     DMA_CCR_MINC | DMA_CCR_DIR | DMA_CCR_EN;
+            } else {
+                global::bbTx.dmaPopApply(lastDmaBbTxLen - dmaTxLen);
+                lastDmaBbTxLen = dmaTxLen;
+            }
         }
         usb::regenerateTx();
         jtag::tick();

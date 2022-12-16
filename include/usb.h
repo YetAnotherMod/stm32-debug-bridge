@@ -11,4 +11,6 @@ namespace usb {
 void reset(void);
 void init(void);
 bool sendFromFifo(descriptor::InterfaceIndex ind, fifo::Fifo<std::uint8_t, global::cdcFifoLenRx> &buf);
+void regenerateTx(void);
+void polling(void);
 } // namespace usb
