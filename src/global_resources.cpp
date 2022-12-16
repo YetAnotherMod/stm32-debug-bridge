@@ -12,11 +12,14 @@ fifo::Fifo<std::uint8_t, cdcFifoLenRx> jtagRx;
 fifo::Fifo<std::uint8_t, cdcFifoLenTx> jtagTx;
 
 gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
-gpio::Pin<gpio::Port::c, 13> led;
-gpio::Bulk<gpio::Port::b, 12, 6, 9> jtagOut;
+gpio::Pin<gpio::Port::a, 6> led;
+gpio::Bulk<gpio::Port::b, 6, 9, 12> jtagOut;
 gpio::Bulk<gpio::Port::a, 5> jtagIn;
 
-gpio::Bulk<gpio::Port::a, 0,1,2,3> uartPins;
+
+fifo::Fifo<std::uint32_t, bbFifoLenTx> bbTx;
+
+gpio::Bulk<gpio::Port::a, 0, 1, 2, 3> uartPins;
 
 LineCodingControl uartLineCoding = {
     115200, usb::cdcPayload::CharFormat::stopBit1,

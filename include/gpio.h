@@ -95,7 +95,18 @@ template <Port port, uint8_t pin> class Pin {
         }
         return result;
     }
-    static GPIO_TypeDef *getGpioPointer() {
+#ifndef NDEBUG
+    static bool bisy;
+#endif
+    uint32_t makeWriteWordHigh() const { return 1u << (pin + 0); }
+    uint32_t makeWriteWordLow() const { return 1u << (pin + 16); }
+    void writeRaw(uint32_t v) {
+        getGpioPointer()->BSRR = v;
+        __DMB();
+    }
+
+  public:
+    GPIO_TypeDef *getGpioPointer() const {
         GPIO_TypeDef *p;
         switch (port) {
 #ifdef GPIOA
@@ -136,23 +147,12 @@ template <Port port, uint8_t pin> class Pin {
         }
         return p;
     }
-#ifndef NDEBUG
-    static bool bisy;
-#endif
-    uint32_t makeWriteWordHigh() const { return 1u << (pin + 0); }
-    uint32_t makeWriteWordLow() const { return 1u << (pin + 16); }
     uint32_t makeWriteWord(bool v) const {
         if (v) {
             return makeWriteWordHigh();
         }
         return makeWriteWordLow();
     }
-    void writeRaw(uint32_t v) {
-        getGpioPointer()->BSRR = v;
-        __DMB();
-    }
-
-  public:
     void configInput(InputType type) {
         GPIO_TypeDef *p = getGpioPointer();
         if (pin < 8) {
@@ -237,18 +237,25 @@ template <Port port, uint8_t... pins> class Bulk {
     static constexpr uint8_t ind[sizeof...(pins)] = {pins...};
     std::tuple<Pin<port, pins>...> pins_;
     template <size_t I = 0>
-    typename std::enable_if<I == sizeof...(pins), uint32_t>::type
-    makeWriteWord(__unused const bool v[sizeof...(pins)]) const {
+    uint32_t makeWriteWord(__unused const bool v[sizeof...(pins)]) const
+        requires(I == sizeof...(pins)) {
         return 0;
     }
     template <size_t I = 0>
-        typename std::enable_if <
-        I<sizeof...(pins), uint32_t>::type
-        makeWriteWord(const bool v[sizeof...(pins)]) const {
+    uint32_t makeWriteWord(const bool v[sizeof...(pins)]) const {
         return makeWriteWord<I + 1>(v) | std::get<I>(pins_).makeWriteWord(v[I]);
     }
 
   public:
+    GPIO_TypeDef *getGpioPointer() {
+        return std::get<0>(pins_).getGpioPointer();
+    }
+    template <typename... in>
+    uint32_t makeWriteWord(in... args) requires(sizeof...(in) ==
+                                                sizeof...(pins)) {
+        bool v[] = {args...};
+        return makeWriteWord(v);
+    }
     void clockOn() { std::get<0>(pins_).clockOn(); }
     template <uint8_t I> void configInput(InputType type) {
         std::get<I>(pins_).configInput(type);
@@ -263,6 +270,9 @@ template <Port port, uint8_t... pins> class Bulk {
         std::get<0>(pins_).writeRaw(makeWriteWord(v));
     }
     template <uint8_t I> void write(bool v) { std::get<I>(pins_).write(v); }
+    template <uint8_t I> uint32_t makeWriteWord(bool v) {
+        return std::get<I>(pins_).makeWriteWord(v);
+    }
     template <uint8_t I> bool read() { return std::get<I>(pins_).read(); }
 };
 

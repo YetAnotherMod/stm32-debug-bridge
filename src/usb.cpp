@@ -181,6 +181,9 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
     if (epBytesCount % 2) {
         data.push(epBuf->data);
     }
+    if(data.capacity() - data.size() >= descriptor::endpoints[epNum_].rxSize){
+        epState::setRx(epNum, epState::rxState::valid);
+    }
     return epBytesCount;
 }
 
@@ -542,7 +545,7 @@ void reset(void) {
     deviceState.state = DeviceState::State::reset;
     deviceState.address = 0;
     deviceState.configuration = 0;
-    uint16_t offset = sizeof(io::bTableEntity) * 8 / 2;
+    uint16_t offset = sizeof(io::bTableEntity) * 8;
     using descriptor::endpoints;
     for (std::ptrdiff_t epNum = 0;
          epNum < static_cast<std::ptrdiff_t>(descriptor::EndpointIndex::last);
@@ -623,7 +626,6 @@ void polling(void) {
     using usb::descriptor::endpoints;
     uint16_t istr = USB->ISTR & istrMAsk;
     if (istr != 0) {
-        global::led.writeLow();
         if (istr & USB_ISTR_CTR) {
             uint16_t epNum = (istr & USB_ISTR_EP_ID_Msk) >> USB_ISTR_EP_ID_Pos;
             auto epReg = usb::io::epRegs(epNum);
@@ -655,7 +657,6 @@ void polling(void) {
             USB->ISTR = (uint16_t)(~USB_ISTR_WKUP);
             USB->CNTR = USB->CNTR & ~USB_CNTR_FSUSP;
         }
-        global::led.writeHigh();
     }
 }
 

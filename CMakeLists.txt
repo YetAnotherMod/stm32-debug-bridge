@@ -42,6 +42,7 @@ add_executable(firmware.elf src/main.cpp
     src/startup.cpp
     src/global_resources.cpp
     src/uart.cpp
+    src/jtag.cpp
 )
 
 add_custom_command(TARGET firmware.elf POST_BUILD

@@ -27,7 +27,7 @@ enum class EndpointIndex {
     last
 };
 namespace epSize {
-constexpr std::uint16_t control = sizeof(::usb::Setup);
+constexpr std::uint16_t control = 16;
 constexpr std::uint16_t interrupt = 16;
 constexpr std::uint16_t small = 32;
 constexpr std::uint16_t large = 64;
@@ -72,7 +72,7 @@ struct DeviceConfiguration : Configuration {
                    cdc::Protocol::none,
                    static_cast<uint8_t>(StringIndex::none)),
               dataRxEp(Endpoint::directionOut | static_cast<uint8_t>(edInd),
-                       Endpoint::EpType::bulk, epSize::large, 0),
+                       Endpoint::EpType::bulk, epSize::small, 0),
               dataTxEp(Endpoint::directionIn | static_cast<uint8_t>(edInd),
                        Endpoint::EpType::bulk, epSize::small, 0) {}
     } __attribute__((packed));
