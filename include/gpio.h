@@ -188,7 +188,7 @@ template <Port port, uint8_t pin> class Pin {
         __DMB();
     }
     bool read() const {
-        return static_cast<bool>(getGpioPointer()->IDR >> pin & 1);
+        return static_cast<bool>(getGpioPointer()->IDR & ( 1u << pin ) );
     }
     void writeHigh() { writeRaw(makeWriteWordHigh()); }
     void writeLow() { writeRaw(makeWriteWordLow()); }
@@ -242,7 +242,8 @@ template <Port port, uint8_t... pins> class Bulk {
         return 0;
     }
     template <size_t I = 0>
-    uint32_t makeWriteWord(const bool v[sizeof...(pins)]) const {
+    uint32_t makeWriteWord(const bool v[sizeof...(pins)]) const 
+        requires(I<sizeof...(pins)) {
         return makeWriteWord<I + 1>(v) | std::get<I>(pins_).makeWriteWord(v[I]);
     }
 
@@ -264,8 +265,8 @@ template <Port port, uint8_t... pins> class Bulk {
         std::get<I>(pins_).configOutput(type, speed);
     }
 
-    template <typename... in> void write(in... args) {
-        static_assert(sizeof...(in) == sizeof...(pins), "incorrect bulk width");
+    template <typename... in> void write(in... args)
+        requires(sizeof...(in) == sizeof...(pins)) {
         bool v[] = {args...};
         std::get<0>(pins_).writeRaw(makeWriteWord(v));
     }
@@ -274,6 +275,9 @@ template <Port port, uint8_t... pins> class Bulk {
         return std::get<I>(pins_).makeWriteWord(v);
     }
     template <uint8_t I> bool read() { return std::get<I>(pins_).read(); }
+    void writeRaw(uint32_t v){
+	std::get<0>(pins_).writeRaw(v);
+    }
 };
 
 } // namespace gpio

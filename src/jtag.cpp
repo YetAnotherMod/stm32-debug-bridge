@@ -9,7 +9,7 @@ void tick(void) {
     static bool waitRead = false;
     if (waitRead) {
         if (global::bbTx.empty()) {
-            global::jtagRx.push(global::jtagIn.read<0>() ? '1' : '0');
+            global::jtagRx.push( global::jtagIn.read() ? '1' : '0');
             waitRead = false;
         }
     }
@@ -28,8 +28,6 @@ void tick(void) {
             case 'R':
                 waitRead = true;
                 cont = false;
-                global::bbTx.push(0);
-                global::bbTx.push(0);
                 break;
             case '0':
                 global::bbTx.push(

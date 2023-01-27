@@ -40,7 +40,6 @@ add_executable(firmware.elf src/main.cpp
     src/usb_descriptors.cpp
     src/usb.cpp
     src/startup.cpp
-    src/global_resources.cpp
     src/uart.cpp
     src/jtag.cpp
 )

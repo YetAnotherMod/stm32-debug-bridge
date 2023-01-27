@@ -194,8 +194,9 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
         std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
     io::pBufferData *epBuf = txBuf(epNum_);
     for (size_t wordsLeft = count / 2; wordsLeft > 0; --wordsLeft) {
-        data.read(reinterpret_cast<uint8_t *>(epBuf), 2);
-        epBuf++;
+	uint16_t x = data.pop();
+	x |= static_cast<uint16_t>(data.pop())<<8;
+        *epBuf++ = x;
     }
     if (count % 2) {
         epBuf->data = data.pop();

@@ -1,10 +1,13 @@
 
 #include <stm32f1xx.h>
 
+#define GLOBAL_RESOURCES_DEFINITIONS
 #include <global_resources.h>
+
 #include <gpio.h>
 #include <jtag.h>
 #include <usb.h>
+
 
 void ClockInit(void) {
     uint32_t reservedBitsCr =
@@ -31,7 +34,7 @@ void ClockInit(void) {
         ;
 
     RCC->CFGR = reservedBitsCfgr | RCC_CFGR_PLLMULL9 | RCC_CFGR_PLLSRC |
-                RCC_CFGR_ADCPRE_DIV4 | RCC_CFGR_PPRE2_DIV1 |
+                RCC_CFGR_ADCPRE_DIV6 | RCC_CFGR_PPRE2_DIV1 |
                 RCC_CFGR_PPRE1_DIV2 | RCC_CFGR_SW_HSI;
 
     FLASH->ACR =
@@ -64,6 +67,7 @@ extern "C" void __terminate() {
 }
 
 static void PortsInit(void) {
+
     global::led.clockOn();
     global::led.writeHigh();
     global::led.configOutput(gpio::OutputType::gen_pp,
@@ -77,23 +81,26 @@ static void PortsInit(void) {
                                     gpio::OutputSpeed::_50mhz);
     global::jtagOut.clockOn();
     global::jtagOut.write(false, false, false);
-    global::jtagOut.configOutput<0>(gpio::OutputType::gen_pp,
+    global::jtagOut.configOutput<0>(gpio::OutputType::gen_od,
                                     gpio::OutputSpeed::_50mhz);
-    global::jtagOut.configOutput<1>(gpio::OutputType::gen_pp,
+    global::jtagOut.configOutput<1>(gpio::OutputType::gen_od,
                                     gpio::OutputSpeed::_50mhz);
-    global::jtagOut.configOutput<2>(gpio::OutputType::gen_pp,
+    global::jtagOut.configOutput<2>(gpio::OutputType::gen_od,
                                     gpio::OutputSpeed::_50mhz);
 
-    global::jtagIn.configInput<0>(gpio::InputType::floating);
+    global::jtagIn.clockOn();
+    global::jtagIn.write(true);
+    global::jtagIn.configInput(gpio::InputType::pull_up_down);
 
     global::uartPins.clockOn();
     global::uartPins.write(false, true, true, true);
-    global::uartPins.configInput<0>(gpio::InputType::pull_up_down); // CTS
+    global::uartPins.configInput<0>(gpio::InputType::floating);  // RX
     global::uartPins.configOutput<1>(gpio::OutputType::alt_pp,
-                                     gpio::OutputSpeed::_50mhz); // RTS
-    global::uartPins.configOutput<2>(gpio::OutputType::alt_pp,
                                      gpio::OutputSpeed::_50mhz); // TX
-    global::uartPins.configInput<3>(gpio::InputType::floating);  // RX
+    global::uartPins.configInput<2>(gpio::InputType::pull_up_down); // CTS
+    global::uartPins.configOutput<3>(gpio::OutputType::alt_pp,
+                                     gpio::OutputSpeed::_50mhz); // RTS
+
 }
 
 int main() {
@@ -123,7 +130,7 @@ int main() {
     TIM2->CCMR2 = 0;
     TIM2->CCER = 0;
     TIM2->PSC = 0;
-    TIM2->ARR = (SystemCoreClock / 100000) - 1;
+    TIM2->ARR = (SystemCoreClock / 1000000) - 1;
     TIM2->CR1 = TIM_CR1_ARPE | TIM_CR1_URS | TIM_CR1_CEN;
     usb::init();
     while (1) {
