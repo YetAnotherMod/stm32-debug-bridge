@@ -5,70 +5,55 @@
 
 namespace jtag {
 void tick(void) {
-    const uint8_t i_am_alive_string[] = "I'm alive!\n";
-    static bool waitRead = false;
-    if (waitRead) {
-        if (global::bbTx.empty()) {
-            global::jtagRx.push( global::jtagIn.read() ? '1' : '0');
-            waitRead = false;
-        }
-    }
-    bool cont = !waitRead;
+    const uint8_t i_am_alive_string[] = "I'm alive!\r\n";
+    bool cont = true;
     while (cont) {
         auto [data, res] = global::jtagTx.popSafe();
         cont = res;
         if (res) {
             switch (data) {
             case 'B':
-                global::led.writeLow();
+                config::led.writeLow();
                 break;
             case 'b':
-                global::led.writeHigh();
+                config::led.writeHigh();
                 break;
             case 'R':
-                waitRead = true;
-                cont = false;
+                config::jtagOut.writeRaw(0);
+                global::jtagRx.push( config::jtagIn.read() ? '1' : '0');
                 break;
             case '0':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(false, false, false));
+                    config::jtagOut.write(false, false, false);
                 break;
             case '1':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(true, false, false));
+                    config::jtagOut.write(true, false, false);
                 break;
             case '2':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(false, true, false));
+                    config::jtagOut.write(false, true, false);
                 break;
             case '3':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(true, true, false));
+                    config::jtagOut.write(true, true, false);
                 break;
             case '4':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(false, false, true));
+                    config::jtagOut.write(false, false, true);
                 break;
             case '5':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(true, false, true));
+                    config::jtagOut.write(true, false, true);
                 break;
             case '6':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(false, true, true));
+                    config::jtagOut.write(false, true, true);
                 break;
             case '7':
-                global::bbTx.push(
-                    global::jtagOut.makeWriteWord(true, true, true));
+                    config::jtagOut.write(true, true, true);
                 break;
             case 'r':
             case 't':
-                global::bbTx.push(global::jtagOut.makeWriteWord<2>(true));
+                config::jtagOut.write<2>(true);
                 break;
 
             case 's':
             case 'u':
-                global::bbTx.push(global::jtagOut.makeWriteWord<2>(false));
+                config::jtagOut.write<2>(false);
                 break;
             case 'h':
                 global::jtagRx.write(i_am_alive_string,

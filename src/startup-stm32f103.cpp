@@ -246,15 +246,33 @@ __attribute__((section(".isr_vector"))) IsrVectors g_pfnVectors = {
 
 extern "C" int main();
 extern "C" void SystemCoreClockUpdate(void);
-extern "C" void __libc_init_array();
-extern "C" void __libc_fini_array();
+
+extern void (*__preinit_array_start []) (void);
+extern void (*__preinit_array_end []) (void);
+extern void (*__init_array_start []) (void);
+extern void (*__init_array_end []) (void);
+extern void (*__fini_array_start []) (void);
+extern void (*__fini_array_end []) (void);
+extern "C" void _init (void);
+extern "C" void _fini (void);
 
 class startup {
-  private:
-    /* data */
-  public:
-    startup(/* args */) { __libc_init_array(); }
-    ~startup() { __libc_fini_array(); }
+public:
+    startup(void){
+        std::ptrdiff_t count = __preinit_array_end - __preinit_array_start;
+        for (std::ptrdiff_t i = 0; i < count; i++)
+            __preinit_array_start[i] ();
+        _init();
+        count = __init_array_end - __init_array_start;
+        for (std::ptrdiff_t i = 0; i < count; i++)
+            __init_array_start[i] ();
+    }
+    ~startup() {
+        std::ptrdiff_t count = __fini_array_end - __fini_array_start;
+        for (std::ptrdiff_t i = 0; i < count; i++)
+            __fini_array_start[i] ();
+        _fini ();
+    }
 };
 
 extern "C" void Reset_Handler() {

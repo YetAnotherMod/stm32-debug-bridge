@@ -76,7 +76,7 @@ class StaticMap {
         while ((p != nullptr) && (p->v->first != k)) {
             p = p->next;
         }
-        return p->v;
+        return p == nullptr ? nullptr : p->v;
     }
 
   private:

@@ -516,10 +516,23 @@ constexpr uint16_t convertEpType(descriptor::Endpoint::EpType t) {
 
 void init(void) {
     /* Force USB re-enumeration */
-    global::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_10mhz);
-    global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_10mhz);
+
+    config::usbPins.write(false, false);
+    config::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_50mhz);
+    config::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
+                                    gpio::OutputSpeed::_50mhz);
+    config::usbPins.write(true, true);
+
+    for (uint32_t i = 0xffffu; i > 0; --i) {
+        __NOP();
+    }
+
+    config::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
+                                    gpio::OutputSpeed::_50mhz);
+    config::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
+                                    gpio::OutputSpeed::_50mhz);
+
     USB->ISTR = 0;
 
     NVIC_EnableIRQ(USB_LP_IRQn);
@@ -530,16 +543,7 @@ void init(void) {
     USB->BTABLE = 0;
     USB->DADDR = 0;
 
-    for (int i = 0; i < 0xFFFF; i++) {
-        __NOP();
-    }
-
     USB->CNTR = USB_CNTR_RESETM;
-
-    global::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
-    global::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
 }
 
 void reset(void) {

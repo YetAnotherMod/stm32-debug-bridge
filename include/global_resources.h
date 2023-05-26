@@ -10,6 +10,14 @@
 #define GLOBAL extern
 #endif
 
+#ifdef GLOBAL_RESOURCES_DEFINITIONS
+#define GLOBAL_INIT(type,obj,params...)type obj(params)
+#else
+#define GLOBAL_INIT(type,obj,params...) extern type obj
+#endif
+
+#include <config.h>
+
 namespace global {
 
 constexpr std::size_t cdcFifoLenRx = 1024;
@@ -26,16 +34,6 @@ GLOBAL fifo::Fifo<std::uint8_t, cdcFifoLenTx> shellTx;
 
 GLOBAL fifo::Fifo<std::uint8_t, cdcFifoLenRx> jtagRx;
 GLOBAL fifo::Fifo<std::uint8_t, cdcFifoLenTx> jtagTx;
-
-GLOBAL fifo::Fifo<std::uint32_t, bbFifoLenTx> bbTx;
-
-GLOBAL gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
-GLOBAL gpio::Pin<gpio::Port::a, 6> led;
-// tdi,tms,tck
-GLOBAL gpio::Bulk<gpio::Port::b, 6, 9, 12> jtagOut;
-GLOBAL gpio::Pin<gpio::Port::a, 5> jtagIn;
-// RX, TX, CTS, RTS
-GLOBAL gpio::Bulk<gpio::Port::a, 3, 2, 0, 1> uartPins;
 
 struct LineCodingControl : usb::cdcPayload::LineCoding {
     bool isChanged;

@@ -8,6 +8,7 @@ int main() {
     using DataType = int;
     using SizeType = uint8_t;
     fifo::internal::FifoRaw<DataType, SizeType, len> buf;
+    const uint8_t * const base = static_cast<uint8_t *>(static_cast<void *>(buf.dmaPush().addr));
 
     buf.occupy(5);
     if (buf.size() != 5) {
@@ -26,7 +27,7 @@ int main() {
             (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +
             ((sizeof(SizeType) * 2) % alignof(DataType) ? alignof(DataType)
                                                         : 0);
-        uint8_t *good = static_cast<uint8_t *>(static_cast<void *>(&buf)) +
+        const uint8_t *good = static_cast<uint8_t *>(static_cast<void *>(&buf)) +
                         (dataShift + sizeof(DataType) * 4);
         if (ret != good) {
             std::cerr << "Bad addr in dmaPop (limit size): " << ret - good
@@ -42,12 +43,8 @@ int main() {
     {
         auto [p, l] = buf.dmaPush();
         uint8_t *ret = static_cast<uint8_t *>(static_cast<void *>(p));
-        constexpr size_t dataShift =
-            (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +
-            ((sizeof(SizeType) * 2) % alignof(DataType) ? alignof(DataType)
-                                                        : 0);
-        uint8_t *good = static_cast<uint8_t *>(static_cast<void *>(&buf)) +
-                        (dataShift + sizeof(DataType) * 5);
+
+        const uint8_t *good = base  + sizeof(DataType) * 5;
         if (ret != good) {
             std::cerr << "Bad addr in dmaPush (limit border): " << ret - good
                       << "\n";
@@ -65,12 +62,7 @@ int main() {
     {
         auto [p, l] = buf.dmaPop();
         uint8_t *ret = static_cast<uint8_t *>(static_cast<void *>(p));
-        constexpr size_t dataShift =
-            (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +
-            ((sizeof(SizeType) * 2) % alignof(DataType) ? alignof(DataType)
-                                                        : 0);
-        uint8_t *good = static_cast<uint8_t *>(static_cast<void *>(&buf)) +
-                        (dataShift + sizeof(DataType) * 4);
+        const uint8_t *good = base  + sizeof(DataType) * 4;
         if (ret != good) {
             std::cerr << "Bad addr in dmaPop (limit border): " << ret - good
                       << "\n";
@@ -85,12 +77,7 @@ int main() {
     {
         auto [p, l] = buf.dmaPush();
         uint8_t *ret = static_cast<uint8_t *>(static_cast<void *>(p));
-        constexpr size_t dataShift =
-            (sizeof(SizeType) * 2) / alignof(DataType) * alignof(DataType) +
-            ((sizeof(SizeType) * 2) % alignof(DataType) ? alignof(DataType)
-                                                        : 0);
-        uint8_t *good = static_cast<uint8_t *>(static_cast<void *>(&buf)) +
-                        (dataShift + sizeof(DataType) * 1);
+        const uint8_t *good = base  + sizeof(DataType) * 1;
         if (ret != good) {
             std::cerr << "Bad addr in dmaPush (limit capacity): " << ret - good
                       << "\n";

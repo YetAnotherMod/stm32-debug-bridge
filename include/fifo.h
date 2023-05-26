@@ -13,8 +13,8 @@ template <typename DataType, typename SizeType, SizeType N>
 requires(std::unsigned_integral<SizeType> && (N > 0) &&
          ((N & (N - 1)) == 0)) class FifoRaw {
   private:
-    SizeType head_;
-    SizeType tail_;
+    volatile SizeType head_;
+    volatile SizeType tail_;
     DataType data_[N];
 
   public:
@@ -28,8 +28,8 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         head_ = 0;
         tail_ = 0;
     }
-    void drop(SizeType len) { head_ += len; }
-    void occupy(SizeType len) { tail_ += len; }
+    void drop(SizeType len) { head_ = head_ + len; }
+    void occupy(SizeType len) { tail_ = tail_ + len; }
     void push(DataType v) requires(std::movable<DataType>) {
         SizeType t = tail_;
         data_[t % N] = std::move(v);

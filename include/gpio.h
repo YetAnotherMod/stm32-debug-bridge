@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stm32f1xx.h>
+#include PLATFORM_HEADER
 
 #include <tuple>
 
@@ -203,15 +203,17 @@ template <Port port, uint8_t pin> class Pin {
     static void clockOn() { RCC->APB2ENR = RCC->APB2ENR | getClockMsk(); }
     static void clockOff() { RCC->APB2ENR = RCC->APB2ENR & ~getClockMsk(); }
     void toggle() { write(!read()); }
-    Pin() {
+    Pin([[maybe_unused]] bool unique=true) {
 #ifndef NDEBUG
-        auto primask = __get_PRIMASK();
-        __disable_irq();
-        if (bisy) {
-            throw std::bad_exception();
+        if(unique){
+            auto primask = __get_PRIMASK();
+            __disable_irq();
+            if (bisy) {
+                throw std::bad_exception();
+            }
+            bisy = true;
+            __set_PRIMASK(primask);
         }
-        bisy = true;
-        __set_PRIMASK(primask);
 #endif
     }
     Pin(const Pin &) = delete;
@@ -276,8 +278,12 @@ template <Port port, uint8_t... pins> class Bulk {
     }
     template <uint8_t I> bool read() { return std::get<I>(pins_).read(); }
     void writeRaw(uint32_t v){
-	std::get<0>(pins_).writeRaw(v);
+        std::get<0>(pins_).writeRaw(v);
     }
+    Bulk(){}
+    template <typename... Args>
+        requires(sizeof...(Args) == sizeof...(pins))
+    Bulk(Args... args):pins_(args...) {}
 };
 
 } // namespace gpio

@@ -33,8 +33,8 @@ constexpr std::uint16_t small = 32;
 constexpr std::uint16_t large = 64;
 } // namespace epSize
 
-constexpr std::uint16_t idVendor = 0x1209;
-constexpr std::uint16_t idProduct = 0xfffe;
+constexpr std::uint16_t idVendor = VENDOR_ID;
+constexpr std::uint16_t idProduct = PRODUCT_ID;
 
 enum class InterfaceIndex { uart = 0, shell = 2, jtag = 4 };
 

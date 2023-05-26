@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <stm32f1xx.h>
+#include PLATFORM_HEADER
 
 namespace usb {
 constexpr std::uint16_t bcdVersion(uint8_t maj, uint8_t min, uint8_t rev) {

@@ -15,7 +15,7 @@ static const Device device(bcdVersion(2, 0, 0), Device::Class::misc,
 const DeviceConfiguration deviceConfig;
 
 static const String<static_cast<char16_t>(LanguageCode::en_US)> lang;
-static const auto manufacturer = u"RC Module"_sd;
+static const auto manufacturer = VENDOR_STRING;
 static const auto product = u"DJM (Debugger Jtag Module)"_sd;
 static const auto uartInterfaceName = u"uart"_sd;
 static const auto shellInterfaceName = u"shell"_sd;
@@ -69,6 +69,10 @@ const io::Endpoint endpoints[static_cast<std::size_t>(EndpointIndex::last)] = {
      static_cast<std::uint8_t>(deviceConfig.jtag.dataRxEp.wMaxPacketSize),
      static_cast<std::uint8_t>(deviceConfig.jtag.dataTxEp.wMaxPacketSize),
      jtagRxHandler, nullptr, nullptr}};
+
+constexpr uint32_t buff_size = []{uint32_t result=0; for (auto i:endpoints){result += i.rxSize+i.txSize;}return result;}();
+
+static_assert (buff_size<512-sizeof(io::bTableEntity) * 8);
 
 uint16_t get(uint16_t wValue, const uint8_t *&payload) {
     uint16_t size = 0;

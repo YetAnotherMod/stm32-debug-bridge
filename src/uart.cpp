@@ -1,7 +1,8 @@
 #include <cdc_payload.h>
 #include <cstring>
+#include <global_resources.h>
 
-#include <stm32f1xx.h>
+#include PLATFORM_HEADER
 
 namespace usb {
 namespace cdcPayload {
@@ -53,7 +54,7 @@ void applyLineCoding() {
 
     // считаем делитель с округлением
 
-    uint32_t brr = (SystemCoreClock / lineCoding.dwDTERate);
+    uint32_t brr = (SystemCoreClock / lineCoding.dwDTERate) * (2/config::uartClkDiv);
 
     brr = brr / 2 + brr % 2;
 
@@ -64,13 +65,13 @@ void applyLineCoding() {
 
     // дожидаемся окончания работы UART. Предполагаем, если 3 чтения подряд
     // регистры пусты, то UART закончил работу
-    while(DMA1_Channel7->CNDTR != 0);
+    while(config::uartDmaTx->CNDTR != 0);
 
     // инициализация UART
     uint32_t cr1 = USART_CR1_TE | USART_CR1_RE;
-    USART2->CR1 = 0;
+    config::uart->CR1 = 0;
 
-    USART2->BRR = brr;
+    config::uart->BRR = brr;
 
     if (lineCoding.bParityType == ParityType::odd ||
         lineCoding.bParityType == ParityType::even) {
@@ -98,18 +99,18 @@ void applyLineCoding() {
 
     uint32_t cr3 = USART_CR3_CTSE | USART_CR3_RTSE | USART_CR3_DMAT | USART_CR3_DMAR;
 
-    USART2->CR1 = cr1;
-    USART2->CR2 = cr2;
-    USART2->CR3 = cr3;
+    config::uart->CR1 = cr1;
+    config::uart->CR2 = cr2;
+    config::uart->CR3 = cr3;
 
     // корректировка dwDTERate в соответствии с точным значением
 
-    lineCoding.dwDTERate = SystemCoreClock * 2 / brr;
-    lineCoding.dwDTERate = lineCoding.dwDTERate / 2 + lineCoding.dwDTERate % 2;
+    lineCoding.dwDTERate = SystemCoreClock * config::uartClkDiv / brr;
+    lineCoding.dwDTERate = lineCoding.dwDTERate / config::uartClkDiv + lineCoding.dwDTERate % 2;
 
     // включение uart
 
-    USART2->CR1 = cr1 | USART_CR1_UE;
+    config::uart->CR1 = cr1 | USART_CR1_UE;
 
     setControlLineState(controlLineState);
 
