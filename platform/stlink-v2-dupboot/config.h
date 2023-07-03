@@ -12,8 +12,8 @@ GLOBAL gpio::Bulk<gpio::Port::b, 6, 9, 12> jtagOut;
 GLOBAL gpio::Pin<gpio::Port::a, 5> jtagIn;
 // RX, TX, CTS, RTS
 GLOBAL gpio::Bulk<gpio::Port::a, 3, 2, 0, 1> uartPins;
-constexpr bool uartCts = false;
-constexpr bool uartRts = false;
+constexpr bool uartCts = true;
+constexpr bool uartRts = true;
 constexpr uint32_t uartClkDiv = 2;
 
 USART_TypeDef * const uart = USART2;
@@ -57,14 +57,15 @@ static inline void ClockInit(void) {
         ;
 
     RCC->CR = reservedBitsCr | RCC_CR_HSION | RCC_CR_HSEON | RCC_CR_PLLON;
-    while ((RCC->CR & RCC_CR_PLLRDY_Msk) != 0)
+    while ((RCC->CR & RCC_CR_PLLRDY_Msk) == 0)
         ;
 
     RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
     while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL)
         ;
-    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USART2EN | RCC_APB1ENR_TIM2EN;
-    RCC->AHBENR = RCC->AHBENR | RCC_AHBENR_DMA1EN;
+    RCC->APB2ENR = 0;
+    RCC->APB1ENR = RCC_APB1ENR_USBEN | RCC_APB1ENR_USART2EN;
+    RCC->AHBENR = RCC_AHBENR_FLITFEN | RCC_AHBENR_SRAMEN | RCC_AHBENR_DMA1EN;
     SystemCoreClockUpdate();
 }
 

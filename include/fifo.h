@@ -35,10 +35,14 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         data_[t % N] = std::move(v);
         tail_ = t + 1;
     }
-    void push(DataType v) requires(!std::movable<DataType>) {
+    SizeType write(const DataType *v, SizeType count) requires(std::copyable<DataType>) {
         SizeType t = tail_;
-        data_[t % N] = v;
-        tail_ = t + 1;
+        SizeType toPlace = std::min(count, static_cast<SizeType>(N - size()));
+        for (SizeType left = toPlace; left > 0; --left) {
+            data_[t++ % N] = *v++;
+        }
+        tail_ = t;
+        return toPlace;
     }
     SizeType write(DataType *v,
                    SizeType count) requires(std::movable<DataType>) {
@@ -50,28 +54,9 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         tail_ = t;
         return toPlace;
     }
-    SizeType write(const DataType *v, SizeType count) requires(
-        std::constructible_from<DataType, const DataType &>
-            &&std::convertible_to<const DataType &, DataType>
-                &&std::constructible_from<DataType, const DataType>
-                    &&std::convertible_to<const DataType, DataType>) {
-        SizeType t = tail_;
-        SizeType toPlace = std::min(count, static_cast<SizeType>(N - size()));
-        for (SizeType left = toPlace; left > 0; --left) {
-            data_[t++ % N] = *v++;
-        }
-        tail_ = t;
-        return toPlace;
-    }
     DataType pop(void) requires(std::movable<DataType>) {
         SizeType h = head_;
         auto x = std::move(data_[h % N]);
-        head_ = h + 1;
-        return x;
-    }
-    DataType pop(void) requires(!std::movable<DataType>) {
-        SizeType h = head_;
-        auto x = data_[h % N];
         head_ = h + 1;
         return x;
     }
@@ -81,16 +66,6 @@ requires(std::unsigned_integral<SizeType> && (N > 0) &&
         SizeType toPlace = std::min(count, size());
         for (SizeType left = toPlace; left > 0; --left) {
             *v++ = std::move(data_[h++ % N]);
-        }
-        head_ = h;
-        return toPlace;
-    }
-    SizeType read(DataType *v,
-                  SizeType count) requires(!std::movable<DataType>) {
-        SizeType h = head_;
-        SizeType toPlace = std::min(count, size());
-        for (SizeType left = toPlace; left > 0; --left) {
-            *v++ = data_[h++ % N];
         }
         head_ = h;
         return toPlace;

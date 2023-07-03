@@ -259,6 +259,8 @@ extern "C" void _fini (void);
 class startup {
 public:
     startup(void){
+        volatile const IsrVectors ** SCB_VTOR = reinterpret_cast<volatile const IsrVectors **>(0xe000ed08);
+        *SCB_VTOR = &g_pfnVectors;
         std::ptrdiff_t count = __preinit_array_end - __preinit_array_start;
         for (std::ptrdiff_t i = 0; i < count; i++)
             __preinit_array_start[i] ();

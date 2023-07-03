@@ -12,41 +12,47 @@
 static inline void PortsInit(void) {
 
     using namespace gpio;
+
+    config::usbPins.clockOn();
+    config::usbPins.configInput<0>(gpio::InputType::floating);
+    config::usbPins.configInput<1>(gpio::InputType::floating);
+    config::usbPins.write(false, false);
+
     config::led.clockOn();
     config::led.writeHigh();
     config::led.configOutput(OutputType::gen_pp,
                              OutputSpeed::_50mhz);
 
-    config::usbPins.clockOn();
-    config::usbPins.write(true, true);
-    config::usbPins.configOutput<0>(OutputType::gen_pp,
-                                    OutputSpeed::_50mhz);
-    config::usbPins.configOutput<1>(OutputType::gen_pp,
-                                    OutputSpeed::_50mhz);
     config::jtagOut.clockOn();
     config::jtagOut.write(false, false, false);
     config::jtagOut.configOutput<0>(OutputType::gen_od,
-                                    OutputSpeed::_50mhz);
+                                    OutputSpeed::_2mhz);
     config::jtagOut.configOutput<1>(OutputType::gen_od,
-                                    OutputSpeed::_50mhz);
+                                    OutputSpeed::_2mhz);
     config::jtagOut.configOutput<2>(OutputType::gen_od,
-                                    OutputSpeed::_50mhz);
+                                    OutputSpeed::_2mhz);
 
     config::jtagIn.clockOn();
     config::jtagIn.write(true);
     config::jtagIn.configInput(InputType::pull_up_down);
 
     config::uartPins.clockOn();
-    config::uartPins.write(false, true, true, true);
+    config::uartPins.write<0>(false);
+    config::uartPins.write<1>(true);
     config::uartPins.configInput<0>(InputType::floating);  // RX
     config::uartPins.configOutput<1>(OutputType::alt_pp,
                                      OutputSpeed::_50mhz); // TX
-    config::uartPins.configInput<2>(InputType::pull_up_down); // CTS
-    config::uartPins.configOutput<3>(OutputType::alt_pp,
-                                     OutputSpeed::_50mhz); // RTS
+    if ( config::uartCts){
+        config::uartPins.configInput<2>(InputType::pull_up_down); // CTS
+        config::uartPins.write<2>(true);
+    }
+    if ( config::uartRts ){
+        config::uartPins.configOutput<3>(OutputType::alt_pp,
+                                         OutputSpeed::_50mhz); // RTS
+        config::uartPins.write<3>(true);
+    }
 
     config::PortsInit();
-
 }
 
 extern "C" void __terminate() {
@@ -64,7 +70,6 @@ int main() {
     config::ClockInit();
     SystemCoreClockUpdate();
     PortsInit();
-    __enable_irq();
 
     uint32_t lastDmaRxLen = 0;
     uint32_t lastDmaTxLen = 0;
@@ -80,6 +85,7 @@ int main() {
     }
 
     usb::init();
+    __enable_irq();
     while (1) {
         if (usb::cdcPayload::isPendingApply()) {
             usb::cdcPayload::applyLineCoding();

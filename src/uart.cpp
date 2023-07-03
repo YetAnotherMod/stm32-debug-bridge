@@ -97,7 +97,7 @@ void applyLineCoding() {
         }
     }(lineCoding.bCharFormat);
 
-    uint32_t cr3 = USART_CR3_CTSE | USART_CR3_RTSE | USART_CR3_DMAT | USART_CR3_DMAR;
+    uint32_t cr3 = (config::uartCts?USART_CR3_CTSE:0) | (config::uartRts?USART_CR3_RTSE:0) | USART_CR3_DMAT | USART_CR3_DMAR;
 
     config::uart->CR1 = cr1;
     config::uart->CR2 = cr2;

@@ -175,7 +175,8 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
     bTable[epNum_].rxCount =
         rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
     for (size_t wordsLeft = epBytesCount / 2; wordsLeft > 0; --wordsLeft) {
-        data.write(reinterpret_cast<const uint8_t *>(epBuf), 2);
+        uint16_t x = *epBuf;
+        data.write(static_cast<const uint8_t *>(static_cast<const void *>(&x)), 2);
         epBuf++;
     }
     if (epBytesCount % 2) {
@@ -518,30 +519,24 @@ void init(void) {
     /* Force USB re-enumeration */
 
     config::usbPins.write(false, false);
-    config::usbPins.configOutput<0>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_50mhz);
     config::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
-                                    gpio::OutputSpeed::_50mhz);
-    config::usbPins.write(true, true);
+                                    gpio::OutputSpeed::_2mhz);
 
     for (uint32_t i = 0xffffu; i > 0; --i) {
         __NOP();
     }
 
-    config::usbPins.configOutput<0>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
-    config::usbPins.configOutput<1>(gpio::OutputType::alt_pp,
-                                    gpio::OutputSpeed::_50mhz);
+    config::usbPins.configInput<0>(gpio::InputType::floating);
+    config::usbPins.configInput<1>(gpio::InputType::floating);
+
+    USB->CNTR = USB_CNTR_FRES;
 
     USB->ISTR = 0;
+    USB->BTABLE = 0;
+    USB->DADDR = 0;
 
     NVIC_EnableIRQ(USB_LP_IRQn);
     NVIC_DisableIRQ(USB_HP_IRQn);
-
-    RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_USBEN;
-    USB->CNTR = USB_CNTR_RESETM | USB_CNTR_FRES;
-    USB->BTABLE = 0;
-    USB->DADDR = 0;
 
     USB->CNTR = USB_CNTR_RESETM;
 }

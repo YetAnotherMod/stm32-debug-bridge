@@ -293,7 +293,7 @@ static_assert(alignof(bTableEntity) == 4);
 struct pBufferData {
     pbAlignedWord data;
     uint16_t &operator=(uint16_t v) { return data = v; }
-    operator uint16_t() { return data; }
+    operator uint16_t() const { return data; }
 };
 
 static_assert(sizeof(pBufferData) == 4);

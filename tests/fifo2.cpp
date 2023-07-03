@@ -4,33 +4,17 @@
 #include <iostream>
 #include <memory>
 
-class NoMove {
-  private:
-    uint16_t data_;
-
-  public:
-    NoMove(const NoMove &) = default;
-    NoMove(NoMove &&) = delete;
-    ~NoMove() = default;
-    NoMove &operator=(const NoMove &) = default;
-    NoMove &operator=(NoMove &&) = delete;
-    NoMove(uint16_t v = 0) : data_(v){};
-    uint16_t operator=(uint16_t v) { return data_ = v; }
-    bool operator==(uint16_t v) { return data_ == v; }
-    operator uint16_t() { return data_; }
-};
-
 int main() {
     int result = 0;
     constexpr std::uint8_t len = 128;
     constexpr std::size_t circles = 1024;
-    fifo::internal::FifoRaw<NoMove, std::uint8_t, len> buf;
+    fifo::internal::FifoRaw<std::uint16_t, std::uint8_t, len> buf;
     {
         std::cout << "Test async push and pull\n";
         auto pusher = std::async([&buf]() {
             std::size_t i = 0;
             while (i < len * circles) {
-                NoMove x = i;
+                std::uint16_t x = i;
                 if (buf.pushSafe(x)) {
                     i++;
                 }
@@ -55,7 +39,7 @@ int main() {
         auto pusher = std::async([&buf]() {
             std::size_t i = 0;
             while (i < len * circles) {
-                NoMove x[len];
+                std::uint16_t x[len];
                 for (size_t j = 0; j < len; ++j) {
                     x[j] = i + j;
                 }
@@ -68,7 +52,7 @@ int main() {
         std::size_t i = 0;
 
         while (i < len * circles) {
-            NoMove x[len];
+            std::uint16_t  x[len];
             std::size_t readCount =
                 buf.read(x, static_cast<std::uint8_t>(
                                 std::min<std::size_t>(len, len * circles - i)));
