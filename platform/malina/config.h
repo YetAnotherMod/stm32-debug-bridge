@@ -26,6 +26,9 @@ GLOBAL gpio::Pin<gpio::Port::b, 9> pwrOn;
 GLOBAL gpio::Pin<gpio::Port::b, 0> hostMode;
 GLOBAL gpio::Pin<gpio::Port::b, 1> edclLock;
 GLOBAL gpio::Pin<gpio::Port::a, 6> fanPwm;
+GLOBAL gpio::Pin<gpio::Port::a, 8> nRst;
+GLOBAL gpio::Pin<gpio::Port::b, 10> jtagTrst;
+GLOBAL gpio::Pin<gpio::Port::b, 11> jtagHalt;
 
 static inline void ClockInit(void) {
     uint32_t reservedBitsCr =
@@ -79,17 +82,27 @@ static inline void PortsInit(void) {
     using namespace gpio;
     pwrOn.clockOn();
     pwrOn.write(false);
-    pwrOn.configOutput(OutputType::gen_pp, OutputSpeed::_50mhz);
+    pwrOn.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
     hostMode.clockOn();
     hostMode.write(false);
-    hostMode.configOutput(OutputType::gen_pp, OutputSpeed::_50mhz);
+    hostMode.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
     edclLock.clockOn();
     edclLock.write(false);
-    edclLock.configOutput(OutputType::gen_pp, OutputSpeed::_50mhz);
+    edclLock.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
     fanPwm.clockOn();
     fanPwm.write(true);
-    fanPwm.configOutput(OutputType::gen_pp, OutputSpeed::_50mhz);
+    fanPwm.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    nRst.clockOn();
+    nRst.write(false);
+    nRst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    jtagTrst.clockOn();
+    jtagTrst.write(true);
+    jtagTrst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    jtagHalt.clockOn();
+    jtagHalt.write(true);
+    jtagHalt.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
 }
+
 static inline void Panic(void){
     config::led.writeLow();
 }
@@ -102,7 +115,8 @@ public:
         fan,
         power,
         host,
-        elock
+        elock,
+        reset
     };
     template <typename fifoOut>
         requires requires(fifoOut &&o, uint8_t x){
@@ -115,14 +129,15 @@ public:
         static const string_view error = "unknown command : "sv;
         static const string_view errorParam = "invalid param: "sv;
         static const string_view setTo = "set to: "sv;
-        static const string_view list = "LIST FAN POWER HOST ELOCK"sv;
-        static const staticMap::StaticMap<string_view, CommandType, 5> commands(
+        static const string_view list = "LIST FAN POWER HOST ELOCK RESET"sv;
+        static const staticMap::StaticMap<string_view, CommandType, 6> commands(
             {
                 {"LIST"sv,CommandType::list},
                 {"FAN"sv,CommandType::fan},
                 {"POWER"sv,CommandType::power},
                 {"HOST"sv,CommandType::host},
-                {"ELOCK"sv,CommandType::elock}
+                {"ELOCK"sv,CommandType::elock},
+                {"RESET"sv,CommandType::reset}
             }
         );
         CommandType c;
@@ -183,6 +198,8 @@ public:
                 for (uint8_t i:param)
                     output.pushSafe(i);
                 pwrOn.write(x);
+                if ( !x )
+                    nRst.write(false);
             }
             break;
         case CommandType::host:
@@ -221,6 +238,25 @@ public:
                 for (uint8_t i:param)
                     output.pushSafe(i);
                 edclLock.write(x);
+            }
+            break;
+        case CommandType::reset:
+            {
+                bool x;
+                if (param == "0"){
+                    x = false;
+                }else if (param == "1"){
+                    x = true;
+                }else{
+                    for (uint8_t i:switchNo)
+                        output.pushSafe(i);
+                    break;
+                }
+                for (uint8_t i:setTo)
+                    output.pushSafe(i);
+                for (uint8_t i:param)
+                    output.pushSafe(i);
+                nRst.write(x);
             }
             break;
         }
