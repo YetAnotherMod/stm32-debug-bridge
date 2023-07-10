@@ -5,7 +5,7 @@ project (tests CXX)
 include_directories(../include)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Werror)
-add_compile_options(-O3 -std=c++2a --coverage -gdwarf-2)
+add_compile_options(-O3 -std=c++2a --coverage -gdwarf-2 -fno-inline)
 add_link_options(--coverage)
 link_libraries(pthread)
 

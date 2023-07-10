@@ -43,12 +43,13 @@ public:
                         if (ind!=std::string_view::npos){
                             line.remove_prefix(ind);
                         }else{
-                            return;
+                            output.push('>');
+                            output.push(' ');
+                            len = 0;
+                            break;
                         }
                         ind = line.find_last_not_of(separators);
-                        if (ind!=string_view::npos){
-                            line.remove_suffix(line.size()-ind-1);
-                        }
+                        line.remove_suffix(line.size()-ind-1);
                         ind = line.find_first_of(separators);
                         if (ind==string_view::npos){
                             command = line;
