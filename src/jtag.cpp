@@ -13,47 +13,47 @@ void tick(void) {
         if (res) {
             switch (data) {
             case 'B':
-                config::led.writeLow();
+                config::ledOn();
                 break;
             case 'b':
-                config::led.writeHigh();
+                config::ledOff();
                 break;
             case 'R':
-                config::jtagOut.writeRaw(0);
-                global::jtagRx.push( config::jtagIn.read() ? '1' : '0');
+                global::jtagOut.writeRaw(0);
+                global::jtagRx.push( global::jtagIn.read() ? '1' : '0');
                 break;
             case '0':
-                    config::jtagOut.write(false, false, false);
+                    global::jtagOut.write(false, false, false);
                 break;
             case '1':
-                    config::jtagOut.write(true, false, false);
+                    global::jtagOut.write(true, false, false);
                 break;
             case '2':
-                    config::jtagOut.write(false, true, false);
+                    global::jtagOut.write(false, true, false);
                 break;
             case '3':
-                    config::jtagOut.write(true, true, false);
+                    global::jtagOut.write(true, true, false);
                 break;
             case '4':
-                    config::jtagOut.write(false, false, true);
+                    global::jtagOut.write(false, false, true);
                 break;
             case '5':
-                    config::jtagOut.write(true, false, true);
+                    global::jtagOut.write(true, false, true);
                 break;
             case '6':
-                    config::jtagOut.write(false, true, true);
+                    global::jtagOut.write(false, true, true);
                 break;
             case '7':
-                    config::jtagOut.write(true, true, true);
+                    global::jtagOut.write(true, true, true);
                 break;
             case 'r':
             case 't':
-                config::jtagOut.write<2>(true);
+                global::jtagOut.write<2>(true);
                 break;
 
             case 's':
             case 'u':
-                config::jtagOut.write<2>(false);
+                global::jtagOut.write<2>(false);
                 break;
             case 'h':
                 global::jtagRx.write(i_am_alive_string,

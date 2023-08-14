@@ -54,7 +54,7 @@ void applyLineCoding() {
 
     // считаем делитель с округлением
 
-    uint32_t brr = (SystemCoreClock / lineCoding.dwDTERate) * (2/config::uartClkDiv);
+    uint32_t brr = (SystemCoreClock / lineCoding.dwDTERate) * (2/global::uartClkDiv);
 
     brr = brr / 2 + brr % 2;
 
@@ -65,13 +65,13 @@ void applyLineCoding() {
 
     // дожидаемся окончания работы UART. Предполагаем, если 3 чтения подряд
     // регистры пусты, то UART закончил работу
-    while(config::uartDmaTx->CNDTR != 0);
+    while(global::uartDmaTx->CNDTR != 0);
 
     // инициализация UART
     uint32_t cr1 = USART_CR1_TE | USART_CR1_RE;
-    config::uart->CR1 = 0;
+    global::uart->CR1 = 0;
 
-    config::uart->BRR = brr;
+    global::uart->BRR = brr;
 
     if (lineCoding.bParityType == ParityType::odd ||
         lineCoding.bParityType == ParityType::even) {
@@ -97,20 +97,20 @@ void applyLineCoding() {
         }
     }(lineCoding.bCharFormat);
 
-    uint32_t cr3 = (config::uartCts?USART_CR3_CTSE:0) | (config::uartRts?USART_CR3_RTSE:0) | USART_CR3_DMAT | USART_CR3_DMAR;
+    uint32_t cr3 = USART_CR3_DMAT | USART_CR3_DMAR;
 
-    config::uart->CR1 = cr1;
-    config::uart->CR2 = cr2;
-    config::uart->CR3 = cr3;
+    global::uart->CR1 = cr1;
+    global::uart->CR2 = cr2;
+    global::uart->CR3 = cr3;
 
     // корректировка dwDTERate в соответствии с точным значением
 
-    lineCoding.dwDTERate = SystemCoreClock * config::uartClkDiv / brr;
-    lineCoding.dwDTERate = lineCoding.dwDTERate / config::uartClkDiv + lineCoding.dwDTERate % 2;
+    lineCoding.dwDTERate = SystemCoreClock * global::uartClkDiv / brr;
+    lineCoding.dwDTERate = lineCoding.dwDTERate / global::uartClkDiv + lineCoding.dwDTERate % 2;
 
     // включение uart
 
-    config::uart->CR1 = cr1 | USART_CR1_UE;
+    global::uart->CR1 = cr1 | USART_CR1_UE;
 
     setControlLineState(controlLineState);
 

@@ -518,16 +518,16 @@ constexpr uint16_t convertEpType(descriptor::Endpoint::EpType t) {
 void init(void) {
     /* Force USB re-enumeration */
 
-    config::usbPins.write(false, false);
-    config::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
+    global::usbPins.write(false, false);
+    global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
                                     gpio::OutputSpeed::_2mhz);
 
     for (uint32_t i = 0xffffu; i > 0; --i) {
         __NOP();
     }
 
-    config::usbPins.configInput<0>(gpio::InputType::floating);
-    config::usbPins.configInput<1>(gpio::InputType::floating);
+    global::usbPins.configInput<0>(gpio::InputType::floating);
+    global::usbPins.configInput<1>(gpio::InputType::floating);
 
     USB->CNTR = USB_CNTR_FRES;
 

@@ -5,30 +5,21 @@
 
 namespace config{
 
-GLOBAL gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
-GLOBAL gpio::Pin<gpio::Port::c, 13> led;
-// tdi,tms,tck
-GLOBAL gpio::Bulk<gpio::Port::b, 15, 12, 13> jtagOut;
-GLOBAL gpio::Pin<gpio::Port::b, 14> jtagIn;
-// RX, TX, CTS, RTS
-using UartType = gpio::Bulk<gpio::Port::a, 10, 9, 11, 12>;
-GLOBAL_INIT(UartType, uartPins,true,true,false,false);
+struct PortPins{
+    gpio::Pin<gpio::Port::b, 9> pwrOn;
+    gpio::Pin<gpio::Port::b, 0> hostMode;
+    gpio::Pin<gpio::Port::b, 1> edclLock;
+    gpio::Pin<gpio::Port::a, 6> fanPwm;
+    gpio::Pin<gpio::Port::a, 8> nRst;
+    gpio::Pin<gpio::Port::b, 10> jtagTrst;
+    gpio::Pin<gpio::Port::b, 11> jtagHalt;
+};
 
-constexpr bool uartCts = false;
-constexpr bool uartRts = false;
-constexpr uint32_t uartClkDiv = 1;
+extern PortPins portPins;
 
-USART_TypeDef * const uart = USART1;
-DMA_Channel_TypeDef * const uartDmaTx = DMA1_Channel4;
-DMA_Channel_TypeDef * const uartDmaRx = DMA1_Channel5;
+static inline void ledOn(void){}
 
-GLOBAL gpio::Pin<gpio::Port::b, 9> pwrOn;
-GLOBAL gpio::Pin<gpio::Port::b, 0> hostMode;
-GLOBAL gpio::Pin<gpio::Port::b, 1> edclLock;
-GLOBAL gpio::Pin<gpio::Port::a, 6> fanPwm;
-GLOBAL gpio::Pin<gpio::Port::a, 8> nRst;
-GLOBAL gpio::Pin<gpio::Port::b, 10> jtagTrst;
-GLOBAL gpio::Pin<gpio::Port::b, 11> jtagHalt;
+static inline void ledOff(void){}
 
 static inline void ClockInit(void) {
     uint32_t reservedBitsCr =
@@ -80,32 +71,30 @@ static inline void ClockInit(void) {
 
 static inline void PortsInit(void) {
     using namespace gpio;
-    pwrOn.clockOn();
-    pwrOn.write(false);
-    pwrOn.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    hostMode.clockOn();
-    hostMode.write(false);
-    hostMode.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    edclLock.clockOn();
-    edclLock.write(false);
-    edclLock.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    fanPwm.clockOn();
-    fanPwm.write(true);
-    fanPwm.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    nRst.clockOn();
-    nRst.write(false);
-    nRst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    jtagTrst.clockOn();
-    jtagTrst.write(true);
-    jtagTrst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
-    jtagHalt.clockOn();
-    jtagHalt.write(true);
-    jtagHalt.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.pwrOn.clockOn();
+    portPins.pwrOn.write(false);
+    portPins.pwrOn.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.hostMode.clockOn();
+    portPins.hostMode.write(false);
+    portPins.hostMode.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.edclLock.clockOn();
+    portPins.edclLock.write(false);
+    portPins.edclLock.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.fanPwm.clockOn();
+    portPins.fanPwm.write(true);
+    portPins.fanPwm.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.nRst.clockOn();
+    portPins.nRst.write(false);
+    portPins.nRst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.jtagTrst.clockOn();
+    portPins.jtagTrst.write(true);
+    portPins.jtagTrst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.jtagHalt.clockOn();
+    portPins.jtagHalt.write(true);
+    portPins.jtagHalt.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
 }
 
-static inline void Panic(void){
-    config::led.writeLow();
-}
+static inline void Panic(void){}
 
 class CommandExecutor{
 public:
@@ -118,11 +107,11 @@ public:
         elock,
         reset
     };
-    template <typename fifoOut>
-        requires requires(fifoOut &&o, uint8_t x){
-            o.pushSafe(x);
-        }
-    void execute(std::string_view command, std::string_view param, fifoOut& output){
+    void push (char c){
+        global::shellRx.pushSafe(c);
+    }
+    template<size_t L>
+    void execute(size_t argc, const std::array<std::string_view, L> &argv){
         using std::string_view;
         using namespace std::literals;
         static const string_view switchNo = "incorrect parameter. must be 0 or 1"sv;
@@ -142,7 +131,7 @@ public:
         );
         CommandType c;
         {
-            auto x = commands.find(command);
+            auto x = commands.find(argv[0]);
             if ( x == nullptr ){
                 c = CommandType::invalid;
             }else{
@@ -152,116 +141,116 @@ public:
         switch (c){
         case CommandType::invalid:
             for (uint8_t i:error)
-                output.pushSafe(i);
-            for (uint8_t i:command)
-                output.pushSafe(i);
+                push(i);
+            for (uint8_t i:argv[0])
+                push(i);
             break;
         case CommandType::list:
             {
                 for (uint8_t i:list)
-                    output.pushSafe(i);
+                    push(i);
             }
             break;
         case CommandType::fan:
             {
                 bool x;
-                if (param == "0"){
+                if (argc==2 && argv[1] == "0"){
                     x = false;
-                }else if (param == "1"){
+                }else if (argc==2 && argv[1] == "1"){
                     x = true;
                 }else{
                     for (uint8_t i:errorParam)
-                        output.pushSafe(i);
+                        push(i);
                     break;
                 }
                 for (uint8_t i:setTo)
-                    output.pushSafe(i);
-                for (uint8_t i:param)
-                    output.pushSafe(i);
-                fanPwm.write(x);
+                    push(i);
+                for (uint8_t i:argv[1])
+                    push(i);
+                portPins.fanPwm.write(x);
             }
             break;
         case CommandType::power:
             {
                 bool x;
-                if (param == "0"){
+                if (argc==2 && argv[1] == "0"){
                     x = false;
-                }else if (param == "1"){
+                }else if (argc==2 && argv[1] == "1"){
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        output.pushSafe(i);
+                        push(i);
                     break;
                 }
                 for (uint8_t i:setTo)
-                    output.pushSafe(i);
-                for (uint8_t i:param)
-                    output.pushSafe(i);
-                pwrOn.write(x);
+                    push(i);
+                for (uint8_t i:argv[1])
+                    push(i);
+                portPins.pwrOn.write(x);
                 if ( !x )
-                    nRst.write(false);
+                    portPins.nRst.write(false);
             }
             break;
         case CommandType::host:
             {
                 bool x;
-                if (param == "0"){
+                if (argc==2 && argv[1] == "0"){
                     x = false;
-                }else if (param == "1"){
+                }else if (argc==2 && argv[1] == "1"){
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        output.pushSafe(i);
+                        push(i);
                     break;
                 }
                 for (uint8_t i:setTo)
-                    output.pushSafe(i);
-                for (uint8_t i:param)
-                    output.pushSafe(i);
-                hostMode.write(x);
+                    push(i);
+                for (uint8_t i:argv[1])
+                    push(i);
+                portPins.hostMode.write(x);
             }
             break;
         case CommandType::elock:
             {
                 bool x;
-                if (param == "0"){
+                if (argc==2 && argv[1] == "0"){
                     x = false;
-                }else if (param == "1"){
+                }else if (argc==2 && argv[1] == "1"){
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        output.pushSafe(i);
+                        push(i);
                     break;
                 }
                 for (uint8_t i:setTo)
-                    output.pushSafe(i);
-                for (uint8_t i:param)
-                    output.pushSafe(i);
-                edclLock.write(x);
+                    push(i);
+                for (uint8_t i:argv[1])
+                    push(i);
+                portPins.edclLock.write(x);
             }
             break;
         case CommandType::reset:
             {
                 bool x;
-                if (param == "0"){
+                if (argc==2 && argv[1] == "0"){
                     x = false;
-                }else if (param == "1"){
+                }else if (argc==2 && argv[1] == "1"){
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        output.pushSafe(i);
+                        push(i);
                     break;
                 }
                 for (uint8_t i:setTo)
-                    output.pushSafe(i);
-                for (uint8_t i:param)
-                    output.pushSafe(i);
-                nRst.write(x);
+                    push(i);
+                for (uint8_t i:argv[1])
+                    push(i);
+                portPins.nRst.write(x);
             }
             break;
         }
-        output.pushSafe('\r');
-        output.pushSafe('\n');
+        push('\r');
+        push('\n');
     }
 private:
 };

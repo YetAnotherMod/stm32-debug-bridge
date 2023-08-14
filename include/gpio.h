@@ -10,6 +10,14 @@
 
 namespace gpio {
 
+extern GPIO_TypeDef gpioa[1];
+extern GPIO_TypeDef gpiob[1];
+extern GPIO_TypeDef gpioc[1];
+extern GPIO_TypeDef gpiod[1];
+extern GPIO_TypeDef gpioe[1];
+extern GPIO_TypeDef gpiof[1];
+extern GPIO_TypeDef gpiog[1];
+
 enum class Port {
 #ifdef GPIOA
     a,
@@ -111,37 +119,37 @@ template <Port port, uint8_t pin> class Pin {
         switch (port) {
 #ifdef GPIOA
         case Port::a:
-            p = GPIOA;
+            p = gpioa;
             break;
 #endif
 #ifdef GPIOB
         case Port::b:
-            p = GPIOB;
+            p = gpiob;
             break;
 #endif
 #ifdef GPIOC
         case Port::c:
-            p = GPIOC;
+            p = gpioc;
             break;
 #endif
 #ifdef GPIOD
         case Port::d:
-            p = GPIOD;
+            p = gpiod;
             break;
 #endif
 #ifdef GPIOE
         case Port::e:
-            p = GPIOE;
+            p = gpioe;
             break;
 #endif
 #ifdef GPIOF
         case Port::f:
-            p = GPIOF;
+            p = gpiof;
             break;
 #endif
 #ifdef GPIOG
         case Port::g:
-            p = GPIOG;
+            p = gpiog;
             break;
 #endif
         }
@@ -239,7 +247,7 @@ template <Port port, uint8_t... pins> class Bulk {
     static constexpr uint8_t ind[sizeof...(pins)] = {pins...};
     std::tuple<Pin<port, pins>...> pins_;
     template <size_t I = 0>
-    uint32_t makeWriteWord(__unused const bool v[sizeof...(pins)]) const
+    uint32_t makeWriteWord([[maybe_unused]] const bool v[sizeof...(pins)]) const
         requires(I == sizeof...(pins)) {
         return 0;
     }

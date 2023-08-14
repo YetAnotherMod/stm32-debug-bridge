@@ -2,24 +2,24 @@
 
 #include <gpio.h>
 #include <static_map.h>
+#include <string_view>
 
 namespace config{
 
-GLOBAL gpio::Bulk<gpio::Port::a, 11, 12> usbPins;
-GLOBAL gpio::Pin<gpio::Port::a, 6> led;
-// tdi,tms,tck
-GLOBAL gpio::Bulk<gpio::Port::b, 6, 9, 12> jtagOut;
-GLOBAL gpio::Pin<gpio::Port::a, 5> jtagIn;
-// RX, TX, CTS, RTS
-GLOBAL gpio::Bulk<gpio::Port::a, 3, 2, 0, 1> uartPins;
-constexpr bool uartCts = true;
-constexpr bool uartRts = true;
-constexpr uint32_t uartClkDiv = 2;
 
-USART_TypeDef * const uart = USART2;
-DMA_Channel_TypeDef * const uartDmaTx = DMA1_Channel7;
-DMA_Channel_TypeDef * const uartDmaRx = DMA1_Channel6;
+struct PortPins{
+    gpio::Pin<gpio::Port::a, 6> led;
+};
 
+extern PortPins portPins;
+
+static inline void ledOn(void){
+    portPins.led.writeLow();
+}
+
+static inline void ledOff(void){
+    portPins.led.writeHigh();
+}
 
 static inline void ClockInit(void) {
     uint32_t reservedBitsCr =
@@ -69,25 +69,30 @@ static inline void ClockInit(void) {
     SystemCoreClockUpdate();
 }
 
-static inline void PortsInit(void) {}
+static inline void PortsInit(void) {
+   portPins.led.clockOn();
+   portPins.led.configOutput(gpio::OutputType::gen_pp, gpio::OutputSpeed::_2mhz);
+}
+
 static inline void Panic(void){
-    config::led.writeLow();
+    ledOn();
 }
 
 class CommandExecutor{
 public:
-    template <typename fifoOut>
-        requires requires(fifoOut &&o, uint8_t x){
-            o.pushSafe(x);
+    void push (char c){
+        global::shellRx.pushSafe(c);
+    }
+    template<size_t L>
+    void execute(size_t argc, const std::array<std::string_view, L> &argv){
+        for ( size_t i = 0; i < argc ; i++){
+            for (uint8_t j:argv[i])
+                push(j);
+            if ( i!=argc-1)
+                push(' ');
         }
-    void execute(std::string_view command, std::string_view param, fifoOut& output){
-        for (uint8_t i:command)
-            output.pushSafe(i);
-        output.pushSafe(' ');
-        for (uint8_t i:param)
-            output.pushSafe(i);
-        output.pushSafe('\r');
-        output.pushSafe('\n');
+        push('\r');
+        push('\n');
     }
 private:
 };

@@ -34,7 +34,8 @@ find_file(
 include(${CONFIG_CMAKE})
 
 add_compile_definitions(STM32F103xB HSE_VALUE=8000000U)
-add_compile_options(-mthumb -fno-pic)
+add_compile_options(-mthumb -fno-pic -ffunction-sections -fdata-sections)
+add_link_options(-Wl,--gc-sections)
 if (MCPU)
     add_compile_options(-mcpu=${MCPU})
     add_link_options(-mcpu=${MCPU})
@@ -58,7 +59,24 @@ add_executable(firmware.elf
     src/usb.cpp
     src/uart.cpp
     src/jtag.cpp
+    src/global_resources.cpp
 )
+
+add_library(gpio STATIC
+    src/gpio.cpp
+)
+
+target_link_options(gpio INTERFACE
+    -Wl,--section-start=.gpioa=0x40010800
+    -Wl,--section-start=.gpiob=0x40010c00
+    -Wl,--section-start=.gpioc=0x40011000
+    -Wl,--section-start=.gpiod=0x40011400
+    -Wl,--section-start=.gpioe=0x40011800
+    -Wl,--section-start=.gpiof=0x40011c00
+    -Wl,--section-start=.gpiog=0x40012000
+    )
+
+target_link_libraries(firmware.elf PRIVATE gpio)
 
 add_custom_command(TARGET firmware.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -Obinary firmware.elf firmware.bin
