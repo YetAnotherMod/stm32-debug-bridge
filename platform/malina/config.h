@@ -107,6 +107,16 @@ public:
         elock,
         reset
     };
+    class hasher{
+        public:
+        constexpr size_t operator () (std::string_view x) const{
+           size_t result = 0;
+           for ( uint8_t c:x){
+               result = ((result << 13) | (result >> (sizeof(std::size_t)*8-13))) ^ c;
+           }
+           return result;
+        }
+    };
     void push (char c){
         global::shellRx.pushSafe(c);
     }
@@ -114,12 +124,12 @@ public:
     void execute(size_t argc, const std::array<std::string_view, L> &argv){
         using std::string_view;
         using namespace std::literals;
-        static const string_view switchNo = "incorrect parameter. must be 0 or 1"sv;
-        static const string_view error = "unknown command : "sv;
-        static const string_view errorParam = "invalid param: "sv;
-        static const string_view setTo = "set to: "sv;
-        static const string_view list = "LIST FAN POWER HOST ELOCK RESET"sv;
-        static const staticMap::StaticMap<string_view, CommandType, 6> commands(
+        static constexpr string_view switchNo = "incorrect parameter. must be 0 or 1"sv;
+        static constexpr string_view error = "unknown command : "sv;
+        static constexpr string_view errorParam = "invalid param: "sv;
+        static constexpr string_view setTo = "set to: "sv;
+        static constexpr string_view list = "LIST FAN POWER HOST ELOCK RESET"sv;
+        static constexpr staticMap::StaticMap<string_view, CommandType, 6, 4, hasher> commands(
             {
                 {"LIST"sv,CommandType::list},
                 {"FAN"sv,CommandType::fan},
