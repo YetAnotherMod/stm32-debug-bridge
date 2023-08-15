@@ -33,22 +33,27 @@ private:
 int main(){
 
     using namespace std::literals::string_view_literals;
+    static const char prompt[] = "<> ";
 
     std::string_view input = 
         "\b12\b23\n"
         "123  123  123  \r"
-        "  \r"sv;
+        "  \r"
+        "13\033[D2\n"
+        ""sv;
 
-    shell::Shell<TestExecutor,1024> sh;
+    shell::Shell<TestExecutor,prompt> sh;
     for ( auto i : input ){
         sh.exec(i);
     }
 
     std::string_view good = 
         "12\b \b23\r\n" "123\r\n"
-        "\033[32m" "> " "\033[0m" "123  123  123  \r\n" "123 123 123\r\n"
-        "\033[32m" "> " "\033[0m" "  \r\n"
-        "\033[32m" "> " "\033[0m"sv;
+        "\033[32m" "<> " "\033[0m" "123  123  123  \r\n" "123 123 123\r\n"
+        "\033[32m" "<> " "\033[0m" "  \r\n"
+        "\033[32m" "<> " "\033[0m" "13\033[D2\r\n" "123\r\n"
+        "\033[32m" "<> " "\033[0m"
+        ""sv;
 
     std::string tx = sh.str();
 

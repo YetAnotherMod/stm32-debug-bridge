@@ -51,7 +51,8 @@ extern "C" void __terminate() {
 }
 
 int main() {
-    shell::Shell<config::CommandExecutor> sh;
+    const static char prompt[] = "> ";
+    shell::Shell<config::CommandExecutor, prompt> sh;
     config::ClockInit();
     SystemCoreClockUpdate();
     PortsInit();

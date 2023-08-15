@@ -65,36 +65,15 @@ constexpr std::string_view get(index ind){
 }
 };
 
-enum class res{
-    ok,
-    err,
-    errPar,
-    errTokNum,
-    errClFull,
-    errCplt
-};
-
 namespace internal{
 
-static inline bool paste ( char * dst, std::size_t len, std::size_t capacity, std::string_view text, std::size_t pos ){
-    if ( len + text.size() > capacity ){
-        return false;
-    }
-    if ( pos > len ){
-        return false;
-    }
-    for ( size_t i = 0 ; i < text.size() ; i++ ){
-        dst[len+text.size()-i-1] = dst[len-i-1];
-    }
-    return true;
-}
 };
 
 template <
     typename CE,
+    const char * prompt,
     std::size_t lineLen = 60,
     std::size_t tokNum = 8,
-    std::size_t promptLen = 4,
     color::index promptColor = color::index::green,
     bool useComplete = false,
     bool useQuoting = false,
@@ -112,11 +91,23 @@ template <
     }
 class Shell:public CE{
 public:
+
+    enum class res{
+        ok,
+        err,
+        errPar,
+        errTokNum,
+        errClFull,
+        errCplt
+    };
     enum class seq{
-        bracket,
+        none,
+        esc,
+        csi,
         home,
         end,
-        del
+        del,
+        seq4f
     };
     enum class echo {
         once,
@@ -158,6 +149,7 @@ public:
         static constexpr char us  = 0x1f;
 
         static constexpr char del = 0x7f;
+        static constexpr char csi = '\233';
     };
 
     static size_t tokenize(std::string_view line, std::array<std::string_view, tokNum> &toks)
@@ -195,7 +187,7 @@ public:
 
         return tokInd;
     }
-static size_t tokenize(std::string_view line, std::array<char, lineLen> &buf, std::array<std::string_view, tokNum> &toks)
+    static size_t tokenize(std::string_view line, std::array<char, lineLen> &buf, std::array<std::string_view, tokNum> &toks)
         requires (useQuoting == true){
         enum stat{
             empty,
@@ -344,6 +336,61 @@ static size_t tokenize(std::string_view line, std::array<char, lineLen> &buf, st
         return tokInd;
     }
 
+    static inline bool paste ( std::array<char, lineLen> &dst, std::size_t len, std::size_t pos, std::string_view text ){
+        if ( len + text.size() > lineLen ){
+            return false;
+        }
+        if ( pos > len ){
+            return false;
+        }
+        for ( size_t i = 0 ; i < len-pos ; i++ ){
+            dst[len+text.size()-i-1] = dst[len-i-1];
+        }
+        for ( size_t i = 0 ; i < text.size() ; i++ ){
+            dst[pos+i] = text[i];
+        }
+        return true;
+    }
+
+    template<typename... Args>
+    constexpr Shell(Args... args):CE(args...),line_(),len(0),pos(0),echoState(echo::on),seqState(seq::none){}
+
+    void exec(char c){
+        using std::string_view;
+        using namespace std::literals;
+        switch ( seqState ){
+            case seq::none:
+                processCharNormal(c);
+                break;
+            case seq::esc:
+                processCharEsc(c);
+                break;
+            case seq::csi:
+                processCharCsi(c);
+                break;
+            case seq::home:
+                processCharHome(c);
+                break;
+            case seq::end:
+                processCharEnd(c);
+                break;
+            case seq::del:
+                processCharDel(c);
+                break;
+            case seq::seq4f:
+                processCharSeq4f(c);
+                break;
+        }
+    }
+
+    void setEchoState (echo v) requires(useEchoOff==true){
+        echoState = v;
+    }
+
+    echo getEchoState (void) requires(useEchoOff==true){
+        return echoState;
+    }
+private:
 
     size_t tokenize () requires (useQuoting == true){
         return tokenize(std::string_view(line_[historyLen].data(),len),line_[historyLen+1],tokens);
@@ -351,52 +398,201 @@ static size_t tokenize(std::string_view line, std::array<char, lineLen> &buf, st
     size_t tokenize () requires (useQuoting == false){
         return tokenize(std::string_view(line_[historyLen].data(),len),tokens);
     }
-
-    template<typename... Args>
-    constexpr Shell(Args... args):CE(args...),len(0),line_(){}
-    void exec(char c){
-        using std::string_view;
-        using namespace std::literals;
+    size_t deleteText(size_t count){
+        if ( count > pos ){
+            count = pos;
+        }
+        moveCursor(-static_cast<int>(count));
+        for ( size_t i = 0; i < len - pos ; i++ ){
+            char c=line_[historyLen][pos+i];
+            pushEcho(c);
+            line_[historyLen][pos-count+i]=c;
+        }
+        for ( size_t i = 0 ; i < count ; i++ )
+            pushEcho(' ');
+        moveCursor(-static_cast<int>(len-pos+count));
+        pos -= count;
+        len -= count;
+        return count;
+    }
+    bool paste(std::string_view text){
+        bool res = paste ( line_[historyLen], len, pos, text );
+        if ( res ){
+            for ( size_t i = 0; i < len + text.size() - pos ; i++ )
+                pushEcho ( line_[historyLen][pos+i] );
+            moveCursor(-static_cast<int>(len-pos));
+            pos += text.size();
+            len += text.size();
+        }
+        return res;
+    }
+    void moveCursor (int count){
+        char dir = 'C';
+        if ( count == 0 ) {}
+        else if ( count == -1 ){
+            pushEcho('\b');
+            return;
+        }else if ( count == 1 ){
+            pushEcho('\033');
+            pushEcho('[');
+            pushEcho('C');
+        }else{
+            if ( count < 0 ){
+                dir = 'D';
+                count = (-count);
+            }
+            if ( count > 999 )
+                count = 999;
+            pos -= count;
+            pushEcho('\033');
+            pushEcho('[');
+            if ( count > 100 )
+                pushEcho(count/100%10+'0');
+            if ( count > 10 )
+                pushEcho(count/10%10+'0');
+            pushEcho(count%10+'0');
+            pushEcho(dir);
+        }
+    }
+    void processCharNormal (char c){
         switch ( c ){
             case '\b':
-                if ( len > 0 ){
-                    --len;
-                    CE::push('\b');
-                    CE::push(' ');
-                    CE::push('\b');
-                }
+                deleteText(1);
                 break;
             case '\n':
             case '\r':
                 {
+                    if ( useEchoOff && echoState == echo::once )
+                        echoState = echo::on;
                     for ( auto i: endl_ )
-                        CE::push(i);
+                        pushEcho(i);
                     std::size_t num = tokenize();
                     if ( num > 0 )
                         CE::execute(num,tokens);
                     for ( auto i: colorPmt_ )
-                        CE::push(i);
+                        pushEcho(i);
                     for ( auto i: prompt_ )
-                        CE::push(i);
+                        pushEcho(i);
                     for ( auto i: colorDef_ )
-                        CE::push(i);
+                        pushEcho(i);
                     len = 0;
+                    pos = 0;
                     break;
                 }
+            case escAnsi::esc:
+                seqState = seq::esc;
+                break;
+            case escAnsi::csi:
+                seqState = seq::csi;
+                break;
             default:
-                line_[historyLen][len++] = c;
-                CE::push(c);
+                paste(std::string_view(&c,1));
                 break;
         }
     }
-private:
-    std::size_t len;
+    void processCharEsc(char c){
+        switch ( c ){
+            case '[':
+                seqState = seq::csi;
+                break;
+            case 'O':
+                seqState = seq::seq4f;
+                break;
+            default:
+                seqState = seq::none;
+                break;
+
+        }
+    }
+    void processCharCsi(char c){
+        seqState = seq::none;
+        switch ( c ){
+            case 'A':
+                break;
+            case 'B':
+                break;
+            case 'C':
+                if ( pos < len ){
+                    pos++;
+                    moveCursor(1);
+                }
+                break;
+            case 'D':
+                if ( pos > 0 ){
+                    pos--;
+                    moveCursor(-1);
+                }
+                break;
+            case '1':
+            case '7':
+                seqState = seq::home;
+                break;
+            case '4':
+            case '8':
+                seqState = seq::end;
+                break;
+            case '3':
+                seqState = seq::del;
+                break;
+        }
+    }
+    void processCharHome(char c){
+        seqState = seq::none;
+        if ( c == '~' ){
+            moveCursor(-static_cast<int>(pos));
+            pos = 0;
+        }
+    }
+    void processCharEnd(char c){
+        seqState = seq::none;
+        if ( c == '~' ){
+            moveCursor(len-pos);
+            pos = len;
+        }
+    }
+    void processCharDel(char c){
+        seqState = seq::none;
+        if ( c == '~' ){
+            if ( pos < len ){
+                pos++;
+                deleteText(1);
+            }
+        }
+    }
+    void processCharSeq4f(char c){
+        seqState = seq::none;
+        switch(c){
+            case 'F':
+                moveCursor(len-pos);
+                pos = len;
+                break;
+            default:
+                break;
+        }
+    }
+    void pushEcho (char c) requires(useEchoOff==false){
+        CE::push(c);
+    }
+    void pushEcho (char c) requires(useEchoOff==true){
+        if ( echoState == echo::on )
+            CE::push(c);
+    }
+    void rePrint (void){
+        pushEcho('\r');
+        for ( size_t i = 0 ; i < len ; i++ ){
+            pushEcho(line_[historyLen][i]);
+        }
+    }
     std::array<std::array<char,lineLen>,historyLen+(useQuoting?2:1)> line_;
     std::array<std::string_view, tokNum> tokens;
     static constexpr std::string_view colorPmt_ = color::get(promptColor);
     static constexpr std::string_view colorDef_ = color::get(color::index::normal);
     static constexpr std::string_view endl_ = endl::get(endLine);
-    static constexpr std::string_view prompt_ = [](){using namespace std::literals::string_view_literals; return "> "sv;}();
+    static constexpr std::string_view prompt_ = prompt;
+    std::size_t len;
+    std::size_t pos;
+    echo echoState;
+    seq seqState;
 };
 
 } // namespace shell
