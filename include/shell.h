@@ -370,9 +370,11 @@ public:
     template<typename... Args>
     constexpr Shell(Args... args):CE(args...),line_(),len(0),pos(0),echoState(echo::on),seqState(seq::none){}
 
-    void exec(char c){
-        using std::string_view;
-        using namespace std::literals;
+    void exec(char c) requires(useEscSeq=false){
+        processCharNormal(c);
+    }
+
+    void exec(char c) requires(useEscSeq==true){
         switch ( seqState ){
             case seq::none:
                 processCharNormal(c);
@@ -495,17 +497,19 @@ private:
                     break;
                 }
             case escAnsi::esc:
-                seqState = seq::esc;
+                if ( useEscSeq )
+                    seqState = seq::esc;
                 break;
             case escAnsi::csi:
-                seqState = seq::csi;
+                if ( useEscSeq )
+                    seqState = seq::csi;
                 break;
             default:
                 paste(std::string_view(&c,1));
                 break;
         }
     }
-    void processCharEsc(char c){
+    void processCharEsc(char c) requires (useEscSeq == true){
         switch ( c ){
             case '[':
                 seqState = seq::csi;
@@ -519,7 +523,7 @@ private:
 
         }
     }
-    void processCharCsi(char c){
+    void processCharCsi(char c) requires (useEscSeq == true){
         seqState = seq::none;
         switch ( c ){
             case 'A':
@@ -551,21 +555,21 @@ private:
                 break;
         }
     }
-    void processCharHome(char c){
+    void processCharHome(char c) requires (useEscSeq == true){
         seqState = seq::none;
         if ( c == '~' ){
             moveCursor(-static_cast<int>(pos));
             pos = 0;
         }
     }
-    void processCharEnd(char c){
+    void processCharEnd(char c) requires (useEscSeq == true){
         seqState = seq::none;
         if ( c == '~' ){
             moveCursor(len-pos);
             pos = len;
         }
     }
-    void processCharDel(char c){
+    void processCharDel(char c) requires (useEscSeq == true){
         seqState = seq::none;
         if ( c == '~' ){
             if ( pos < len ){
@@ -574,7 +578,7 @@ private:
             }
         }
     }
-    void processCharSeq4f(char c){
+    void processCharSeq4f(char c) requires (useEscSeq == true){
         seqState = seq::none;
         switch(c){
             case 'F':
