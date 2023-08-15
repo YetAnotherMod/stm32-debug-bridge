@@ -212,7 +212,7 @@ public:
                             case empty:
                                 break;
                             case token:
-                                toks[tokInd++] = std::string_view(buf+tokBegin,bufInd-tokBegin);
+                                toks[tokInd++] = std::string_view(buf.data()+tokBegin,bufInd-tokBegin);
                                 status = empty; 
                                 break;
                             case tokenEsc:
@@ -332,6 +332,21 @@ public:
                     }
                     break;
             }
+        }
+        switch ( status ){
+            case empty:
+                break;
+            case token:
+                toks[tokInd++] = std::string_view(buf.data()+tokBegin,bufInd-tokBegin);
+                status = empty; 
+                break;
+            case singleQuotes:
+            case doubleQuotes:
+            case tokenEsc:
+            case singleQuotesEsc:
+            case doubleQuotesEsc:
+                throw res::err;
+                break;
         }
         return tokInd;
     }
