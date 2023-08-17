@@ -179,4 +179,5 @@ SECTIONS
   .gpioe 0x40011800 (NOLOAD) : { *(.gpioe) }
   .gpiof 0x40011c00 (NOLOAD) : { *(.gpiof) }
   .gpiog 0x40012000 (NOLOAD) : { *(.gpiog) }
+  .afio 0x40010000 (NOLOAD) : { *(.afio) }
 }
