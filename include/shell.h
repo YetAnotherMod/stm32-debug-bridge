@@ -368,7 +368,11 @@ public:
     }
 
     template<typename... Args>
-    constexpr Shell(Args... args):CE(args...),line_(),len(0),pos(0),echoState(echo::on),seqState(seq::none){}
+    constexpr Shell(Args... args):CE(args...),line_(),pos(0),historyInd(0),historyDeep(0),echoState(echo::on),seqState(seq::none){
+        for ( auto &i:len ){
+            i = 0;
+        }
+    }
 
     void exec(char c) requires(useEscSeq=false){
         processCharNormal(c);
@@ -410,36 +414,36 @@ public:
 private:
 
     size_t tokenize () requires (useQuoting == true){
-        return tokenize(std::string_view(line_[historyLen].data(),len),line_[historyLen+1],tokens);
+        return tokenize(std::string_view(line_[historyLen].data(),len[historyLen]),line_[historyLen+1],tokens);
     }
     size_t tokenize () requires (useQuoting == false){
-        return tokenize(std::string_view(line_[historyLen].data(),len),tokens);
+        return tokenize(std::string_view(line_[historyLen].data(),len[historyLen]),tokens);
     }
     size_t deleteText(size_t count){
         if ( count > pos ){
             count = pos;
         }
         moveCursor(-static_cast<int>(count));
-        for ( size_t i = 0; i < len - pos ; i++ ){
+        for ( size_t i = 0; i < len[historyLen] - pos ; i++ ){
             char c=line_[historyLen][pos+i];
             pushEcho(c);
             line_[historyLen][pos-count+i]=c;
         }
         for ( size_t i = 0 ; i < count ; i++ )
             pushEcho(' ');
-        moveCursor(-static_cast<int>(len-pos+count));
+        moveCursor(-static_cast<int>(len[historyLen]-pos+count));
         pos -= count;
-        len -= count;
+        len[historyLen] -= count;
         return count;
     }
     bool paste(std::string_view text){
-        bool res = paste ( line_[historyLen], len, pos, text );
+        bool res = paste ( line_[historyLen], len[historyLen], pos, text );
         if ( res ){
-            for ( size_t i = 0; i < len + text.size() - pos ; i++ )
+            for ( size_t i = 0; i < len[historyLen] + text.size() - pos ; i++ )
                 pushEcho ( line_[historyLen][pos+i] );
-            moveCursor(-static_cast<int>(len-pos));
+            moveCursor(-static_cast<int>(len[historyLen]-pos));
             pos += text.size();
-            len += text.size();
+            len[historyLen] += text.size();
         }
         return res;
     }
@@ -484,16 +488,23 @@ private:
                     for ( auto i: endl_ )
                         pushEcho(i);
                     std::size_t num = tokenize();
-                    if ( num > 0 )
+                    if ( num > 0 ){
                         CE::execute(num,tokens);
+                        if ( historyLen > 0 ){
+                            line_[historyInd] = line_[historyLen];
+                            len[historyInd] = len[historyLen];
+                            historyInd = (historyInd + 1) % historyLen;
+                        }
+                    }
                     for ( auto i: colorPmt_ )
                         pushEcho(i);
                     for ( auto i: prompt_ )
                         pushEcho(i);
                     for ( auto i: colorDef_ )
                         pushEcho(i);
-                    len = 0;
+                    len[historyLen] = 0;
                     pos = 0;
+                    historyDeep = 0;
                     break;
                 }
             case escAnsi::esc:
@@ -527,11 +538,38 @@ private:
         seqState = seq::none;
         switch ( c ){
             case 'A':
+                if ( historyLen>0 ){
+                    if ( historyDeep == 0 ){
+                        line_[historyLen+1] = line_[historyLen];
+                        len[historyLen+1] = len[historyLen];
+                    }
+                    if ( historyDeep < historyLen && len[(historyLen+historyInd-historyDeep-1)%historyLen] > 0 ){
+                        line_[historyLen] = line_[(historyLen+historyInd-historyDeep-1)%historyLen];
+                        len[historyLen] = len[(historyLen+historyInd-historyDeep-1)%historyLen];
+                        historyDeep++;
+                        pos = len[historyLen];
+                    }
+                }
+                rePrint ();
                 break;
             case 'B':
+                if ( historyLen > 0 ){
+                    if ( historyDeep > 0 ){
+                        historyDeep--;
+                        if ( historyDeep == 0 ){
+                            line_[historyLen] = line_[historyLen+1];
+                            len[historyLen] = len[historyLen+1];
+                        }else{
+                            line_[historyLen] = line_[(historyLen+historyInd-historyDeep-1)%historyLen];
+                            len[historyLen] = len[(historyLen+historyInd-historyDeep-1)%historyLen];
+                        }
+                        pos = len[historyLen];
+                    }
+                }
+                rePrint ();
                 break;
             case 'C':
-                if ( pos < len ){
+                if ( pos < len[historyLen] ){
                     pos++;
                     moveCursor(1);
                 }
@@ -565,14 +603,14 @@ private:
     void processCharEnd(char c) requires (useEscSeq == true){
         seqState = seq::none;
         if ( c == '~' ){
-            moveCursor(len-pos);
-            pos = len;
+            moveCursor(len[historyLen]-pos);
+            pos = len[historyLen];
         }
     }
     void processCharDel(char c) requires (useEscSeq == true){
         seqState = seq::none;
         if ( c == '~' ){
-            if ( pos < len ){
+            if ( pos < len[historyLen] ){
                 pos++;
                 deleteText(1);
             }
@@ -582,8 +620,8 @@ private:
         seqState = seq::none;
         switch(c){
             case 'F':
-                moveCursor(len-pos);
-                pos = len;
+                moveCursor(len[historyLen]-pos);
+                pos = len[historyLen];
                 break;
             default:
                 break;
@@ -597,19 +635,34 @@ private:
             CE::push(c);
     }
     void rePrint (void){
-        pushEcho('\r');
-        for ( size_t i = 0 ; i < len ; i++ ){
+        int curPos = pos;
+        if ( useCarriageReturn ){
+            pushEcho('\r');
+        }else{
+            moveCursor (-curPos-static_cast<int>(prompt_.size()));
+        }
+        pushEcho('\033');
+        pushEcho('[');
+        pushEcho('K');
+        for ( auto i : prompt_ ){
+            pushEcho (i);
+        }
+        for ( size_t i = 0 ; i < len[historyLen] ; i++ ){
             pushEcho(line_[historyLen][i]);
         }
+        moveCursor ( pos-static_cast<int>(len[historyLen]) );
     }
-    std::array<std::array<char,lineLen>,historyLen+(useQuoting?2:1)> line_;
+    static constexpr uint32_t buffCount = historyLen+((useQuoting||(historyLen>0))?2:1);
+    std::array<std::array<char,lineLen>,buffCount> line_;
     std::array<std::string_view, tokNum> tokens;
     static constexpr std::string_view colorPmt_ = color::get(promptColor);
     static constexpr std::string_view colorDef_ = color::get(color::index::normal);
     static constexpr std::string_view endl_ = endl::get(endLine);
     static constexpr std::string_view prompt_ = prompt;
-    std::size_t len;
+    std::array<std::size_t, buffCount> len;
     std::size_t pos;
+    std::size_t historyInd;
+    std::size_t historyDeep;
     echo echoState;
     seq seqState;
 };
