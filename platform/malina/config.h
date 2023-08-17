@@ -9,6 +9,7 @@ struct PortPins{
     gpio::Pin<gpio::Port::b, 9> pwrOn;
     gpio::Pin<gpio::Port::b, 0> hostMode;
     gpio::Pin<gpio::Port::b, 1> edclLock;
+    gpio::Pin<gpio::Port::a, 15> fanEn;
     gpio::Pin<gpio::Port::a, 6> fanPwm;
     gpio::Pin<gpio::Port::a, 8> nRst;
     gpio::Pin<gpio::Port::b, 10> jtagTrst;
@@ -63,7 +64,7 @@ static inline void ClockInit(void) {
     RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
     while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL)
         ;
-    RCC->APB2ENR = RCC_APB2ENR_USART1EN;
+    RCC->APB2ENR = RCC_APB2ENR_USART1EN | RCC_APB2ENR_AFIOEN;
     RCC->APB1ENR = RCC_APB1ENR_USBEN;
     RCC->AHBENR = RCC_AHBENR_FLITFEN | RCC_AHBENR_SRAMEN | RCC_AHBENR_DMA1EN;
     SystemCoreClockUpdate();
@@ -71,6 +72,7 @@ static inline void ClockInit(void) {
 
 static inline void PortsInit(void) {
     using namespace gpio;
+    Afio()->MAPR = Afio::MAPR::swjCfgSwdOnly;
     portPins.pwrOn.clockOn();
     portPins.pwrOn.write(false);
     portPins.pwrOn.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
@@ -83,6 +85,9 @@ static inline void PortsInit(void) {
     portPins.fanPwm.clockOn();
     portPins.fanPwm.write(true);
     portPins.fanPwm.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
+    portPins.fanEn.clockOn();
+    portPins.fanEn.write(true);
+    portPins.fanEn.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
     portPins.nRst.clockOn();
     portPins.nRst.write(false);
     portPins.nRst.configOutput(OutputType::gen_pp, OutputSpeed::_2mhz);
@@ -127,7 +132,7 @@ public:
         static constexpr string_view switchNo = "incorrect parameter. must be 0 or 1"sv;
         static constexpr string_view error = "unknown command : "sv;
         static constexpr string_view errorParam = "invalid param: "sv;
-        static constexpr string_view setTo = "set to: "sv;
+        static constexpr string_view setTo = " set to: "sv;
         static constexpr string_view list = "LIST FAN POWER HOST ELOCK RESET"sv;
         static constexpr staticMap::StaticMap<string_view, CommandType, 6, 4, hasher> commands(
             {
@@ -173,11 +178,14 @@ public:
                         push(i);
                     break;
                 }
+                for (uint8_t i:argv[0])
+                    push(i);
                 for (uint8_t i:setTo)
                     push(i);
                 for (uint8_t i:argv[1])
                     push(i);
                 portPins.fanPwm.write(x);
+                portPins.fanEn.write(x);
             }
             break;
         case CommandType::power:
@@ -192,6 +200,8 @@ public:
                         push(i);
                     break;
                 }
+                for (uint8_t i:argv[0])
+                    push(i);
                 for (uint8_t i:setTo)
                     push(i);
                 for (uint8_t i:argv[1])
@@ -213,6 +223,8 @@ public:
                         push(i);
                     break;
                 }
+                for (uint8_t i:argv[0])
+                    push(i);
                 for (uint8_t i:setTo)
                     push(i);
                 for (uint8_t i:argv[1])
@@ -232,6 +244,8 @@ public:
                         push(i);
                     break;
                 }
+                for (uint8_t i:argv[0])
+                    push(i);
                 for (uint8_t i:setTo)
                     push(i);
                 for (uint8_t i:argv[1])
@@ -251,6 +265,8 @@ public:
                         push(i);
                     break;
                 }
+                for (uint8_t i:argv[0])
+                    push(i);
                 for (uint8_t i:setTo)
                     push(i);
                 for (uint8_t i:argv[1])
