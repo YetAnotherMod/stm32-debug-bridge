@@ -110,7 +110,8 @@ public:
         power,
         host,
         elock,
-        reset
+        reset,
+        help
     };
     class hasher{
         public:
@@ -134,14 +135,22 @@ public:
         static constexpr string_view errorParam = "invalid param: "sv;
         static constexpr string_view setTo = " set to: "sv;
         static constexpr string_view list = "LIST FAN POWER HOST ELOCK RESET"sv;
-        static constexpr staticMap::StaticMap<string_view, CommandType, 6, 4, hasher> commands(
+        static constexpr string_view help =
+            "FAN <0|1> - turn fan on/off\r\n"
+            "POWER <0|1> - turn power on/off\r\n"
+            "HOST <0|1> - turn force host mode on/off\r\n"
+            "ELOCK <0|1> - turn edcl on/off\r\n"
+            "RESET <0|1> - turn nRST on/off\r\n";
+        static constexpr staticMap::StaticMap<string_view, CommandType, 8, 4, hasher> commands(
             {
                 {"LIST"sv,CommandType::list},
                 {"FAN"sv,CommandType::fan},
                 {"POWER"sv,CommandType::power},
                 {"HOST"sv,CommandType::host},
                 {"ELOCK"sv,CommandType::elock},
-                {"RESET"sv,CommandType::reset}
+                {"RESET"sv,CommandType::reset},
+                {"HELP"sv,CommandType::help},
+                {"help"sv,CommandType::help}
             }
         );
         CommandType c;
@@ -272,6 +281,12 @@ public:
                 for (uint8_t i:argv[1])
                     push(i);
                 portPins.nRst.write(x);
+            }
+            break;
+        case CommandType::help:
+            {
+                for (uint8_t i:help)
+                    push(i);
             }
             break;
         }
