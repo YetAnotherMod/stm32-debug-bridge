@@ -82,6 +82,7 @@ int main() {
 
     usb::init();
     __enable_irq();
+    config::configInit();
     while (1) {
         if (usb::cdcPayload::isPendingApply()) {
             usb::cdcPayload::applyLineCoding();
