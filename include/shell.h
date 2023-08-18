@@ -478,6 +478,7 @@ private:
     void processCharNormal (char c){
         switch ( c ){
             case '\b':
+            case escAnsi::del:
                 deleteText(1);
                 break;
             case '\n':
