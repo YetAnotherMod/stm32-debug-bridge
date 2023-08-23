@@ -119,7 +119,10 @@ int main() {
         {
             sh.exec(global::shellTx.pop());
         }
-        jtag::tick();
+        while ( !global::jtagTx.empty() )
+        {
+            jtag::tick(global::jtagTx.pop());
+        }
         if (!global::uartRx.empty()) {
             usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,
                               global::uartRx);
