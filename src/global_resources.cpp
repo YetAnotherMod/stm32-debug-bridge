@@ -10,6 +10,9 @@ JtagTxType jtagTx;
 LineCodingControl uartLineCoding;
 UartPinsType uartPins;
 __attribute__ ((section(".flashconfig"))) uint16_t flashconfig[512];
+UsbPinsType usbPins;
+JtagOutType jtagOut;
+JtagInType jtagIn;
 }
 
 namespace config {

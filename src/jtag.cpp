@@ -19,7 +19,6 @@ void tick(void) {
                 config::ledOff();
                 break;
             case 'R':
-                global::jtagOut.writeRaw(0);
                 global::jtagRx.push( global::jtagIn.read() ? '1' : '0');
                 break;
             case '0':

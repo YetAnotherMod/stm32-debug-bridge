@@ -8,6 +8,9 @@
 #include <usb.h>
 #include <shell.h>
 
+#include CLOCK_INIT_HEADER
+#include COMMANDS_HEADER
+
 static inline void PortsInit(void) {
 
     using namespace gpio;
@@ -51,19 +54,7 @@ extern "C" void __terminate() {
 }
 
 int main() {
-    const static char prompt[] = "> ";
-    shell::Shell<
-        config::CommandExecutor,
-        prompt,
-        60,
-        8,
-        shell::color::index::green,
-        false,
-        false,
-        false,
-        16
-    > sh;
-    config::ClockInit();
+    clock::init();
     SystemCoreClockUpdate();
     PortsInit();
 
@@ -79,10 +70,22 @@ int main() {
         global::uartDmaRx->CCR = DMA_CCR_PSIZE_1 | DMA_CCR_MINC | DMA_CCR_PSIZE_1 |
                              DMA_CCR_CIRC | DMA_CCR_EN;
     }
+    const static char prompt[] = "> ";
+    shell::Shell<
+        commands::CommandExecutor,
+        prompt,
+        60,
+        8,
+        shell::color::index::green,
+        false,
+        false,
+        false,
+        16
+    > sh;
+    config::configInit();
 
     usb::init();
     __enable_irq();
-    config::configInit();
     while (1) {
         if (usb::cdcPayload::isPendingApply()) {
             usb::cdcPayload::applyLineCoding();
