@@ -522,9 +522,15 @@ void init(void) {
     global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
                                     gpio::OutputSpeed::_2mhz);
 
-    for (uint32_t i = 0xffffu; i > 0; --i) {
-        __NOP();
-    }
+    SysTick->CTRL = 0x00;
+    SysTick->LOAD = (SystemCoreClock/8/100)-1;
+    SysTick->VAL = 0x00;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
+
+
+    while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0)
+        ;
+    SysTick->CTRL = 0x00;
 
     global::usbPins.configInput<0>(gpio::InputType::floating);
     global::usbPins.configInput<1>(gpio::InputType::floating);

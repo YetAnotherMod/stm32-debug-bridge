@@ -70,8 +70,13 @@ public:
             if ( pinCfg & flags::pwr ){
                 portPins.pwrOn.write(true);
                 if ( pinCfg & flags::rst ){
-                    for (uint32_t i = 0xfffffu; i > 0; --i)
-                        __NOP();
+                    SysTick->CTRL = 0x00;
+                    SysTick->LOAD = (SystemCoreClock/8/2)-1;
+                    SysTick->VAL = 0x00;
+                    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
+                    while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0)
+                        ;
+                    SysTick->CTRL = 0x00;
                     portPins.nRst.write(true);
                 }
             }else{
