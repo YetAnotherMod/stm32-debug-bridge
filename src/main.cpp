@@ -6,10 +6,9 @@
 #include <gpio.h>
 #include <jtag.h>
 #include <usb.h>
-#include <shell.h>
+#include <device-shell.h>
 
 #include CLOCK_INIT_HEADER
-#include COMMANDS_HEADER
 
 static inline void PortsInit(void) {
 
@@ -57,6 +56,7 @@ int main() {
     clock::init();
     SystemCoreClockUpdate();
     PortsInit();
+    deviceShell::tick('\b');
 
     uint32_t lastDmaRxLen = 0;
     uint32_t lastDmaTxLen = 0;
@@ -70,18 +70,7 @@ int main() {
         global::uartDmaRx->CCR = DMA_CCR_PSIZE_1 | DMA_CCR_MINC | DMA_CCR_PSIZE_1 |
                              DMA_CCR_CIRC | DMA_CCR_EN;
     }
-    const static char prompt[] = "> ";
-    shell::Shell<
-        commands::CommandExecutor,
-        prompt,
-        60,
-        8,
-        shell::color::index::green,
-        false,
-        false,
-        false,
-        16
-    > sh;
+
     config::configInit();
 
     usb::init();
@@ -117,7 +106,7 @@ int main() {
         usb::regenerateTx();
         while( !global::shellTx.empty() )
         {
-            sh.exec(global::shellTx.pop());
+            deviceShell::tick(global::shellTx.pop());
         }
         while ( !global::jtagTx.empty() )
         {
