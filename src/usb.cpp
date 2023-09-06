@@ -21,6 +21,9 @@ struct DeviceState {
     uint8_t configuration;
 };
 static DeviceState deviceState;
+bool uartTxProcessing;
+bool shellTxProcessing;
+bool jtagTxProcessing;
 
 struct ControlState {
     enum class State { idle, rx, tx, txZlp, txLast, statusIn, statusOut };
@@ -460,19 +463,37 @@ void uartRxHandler() {
     }
 }
 
-void uartTxHandler() { ; }
+void uartTxHandler() {
+    if (!global::uartRx.empty()) {
+        writeFromFifo(descriptor::EndpointIndex::uartData, global::uartRx);
+    }else{
+        uartTxProcessing = false;
+    }
+}
 void uartInterruptHandler() { ; }
 
 void shellRxHandler() {
     readToFifo(descriptor::EndpointIndex::shellData, global::shellTx);
 }
-void shellTxHandler() { ; }
+void shellTxHandler() {
+    if (!global::shellRx.empty()) {
+        writeFromFifo(descriptor::EndpointIndex::shellData, global::shellRx);
+    }else{
+        shellTxProcessing = false;
+    }
+}
 void shellInterruptHandler() { ; }
 
 void jtagRxHandler() {
     readToFifo(descriptor::EndpointIndex::jtagData, global::jtagTx);
 }
-void jtagTxHandler() { ; }
+void jtagTxHandler() {
+    if (!global::jtagRx.empty()) {
+        writeFromFifo(descriptor::EndpointIndex::jtagData, global::jtagRx);
+    }else{
+        jtagTxProcessing = false;
+    }
+}
 void jtagInterruptHandler() { ; }
 
 void regenerateTx(void) {
@@ -587,15 +608,15 @@ void reset(void) {
 static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind) {
     switch (ind) {
     case descriptor::InterfaceIndex::uart:
-        return epState::getTx(descriptor::EndpointIndex::uartData) ==
+        return !uartTxProcessing && epState::getTx(descriptor::EndpointIndex::uartData) ==
                epState::txState::nak;
         break;
     case descriptor::InterfaceIndex::shell:
-        return epState::getTx(descriptor::EndpointIndex::shellData) ==
+        return !shellTxProcessing && epState::getTx(descriptor::EndpointIndex::shellData) ==
                epState::txState::nak;
         break;
     case descriptor::InterfaceIndex::jtag:
-        return epState::getTx(descriptor::EndpointIndex::jtagData) ==
+        return !jtagTxProcessing && epState::getTx(descriptor::EndpointIndex::jtagData) ==
                epState::txState::nak;
         break;
     default:
@@ -610,12 +631,15 @@ bool sendFromFifo(descriptor::InterfaceIndex ind,
         descriptor::EndpointIndex ep = [](descriptor::InterfaceIndex ind) {
             switch (ind) {
             case descriptor::InterfaceIndex::uart:
+                uartTxProcessing = true;
                 return descriptor::EndpointIndex::uartData;
 
             case descriptor::InterfaceIndex::shell:
+                shellTxProcessing = true;
                 return descriptor::EndpointIndex::shellData;
 
             case descriptor::InterfaceIndex::jtag:
+                jtagTxProcessing = true;
                 return descriptor::EndpointIndex::jtagData;
 
             default:

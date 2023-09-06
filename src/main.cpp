@@ -10,6 +10,8 @@
 
 #include CLOCK_INIT_HEADER
 
+#include <systick-wait.h>
+
 static inline void PortsInit(void) {
 
     using namespace gpio;
@@ -56,7 +58,6 @@ int main() {
     clock::init();
     SystemCoreClockUpdate();
     PortsInit();
-    deviceShell::tick('\b');
 
     uint32_t lastDmaRxLen = 0;
     uint32_t lastDmaTxLen = 0;
@@ -72,6 +73,8 @@ int main() {
     }
 
     config::configInit();
+    usb::cdcPayload::applyLineCoding();
+    deviceShell::tick('\b');
 
     usb::init();
     __enable_irq();
@@ -84,6 +87,11 @@ int main() {
             global::uartRx.dmaPushApply((lastDmaRxLen - dmaRxLen) %
                                         global::uartRx.capacity());
             lastDmaRxLen = dmaRxLen;
+            __disable_irq();
+            if ( global::uartRx.size() > global::uartRx.capacity() ){
+                global::uartRx.dmaPopApply(global::uartRx.size() - global::uartRx.capacity());
+            }
+            __enable_irq();
         }
         if (uint32_t dmaTxLen = global::uartDmaTx->CNDTR;
             (lastDmaTxLen - dmaTxLen != 0) || (!global::uartTx.empty())) {

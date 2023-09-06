@@ -31,7 +31,7 @@ static inline void init(void) {
     SysTick->CTRL = 0x00;
     SysTick->LOAD = (HSI_VALUE/8)-1;
     SysTick->VAL = 0x00;
-    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
 
     while (((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0)&&((RCC->CR & RCC_CR_HSERDY_Msk) == 0))
         ;
