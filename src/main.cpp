@@ -78,6 +78,13 @@ int main() {
 
     usb::init();
     __enable_irq();
+
+    RCC->CSR = RCC_CSR_LSION;
+    PWR->CR = PWR->CR | PWR_CR_DBP;
+    NVIC_EnableIRQ(RCC_IRQn);
+    RCC->CIR = RCC_CIR_LSIRDYIE | RCC_CIR_LSERDYIE;
+    RCC->BDCR = RCC_BDCR_RTCEN | RCC_BDCR_LSEON;
+    RCC->CIR = RCC_CIR_LSIRDYIE;
     while (1) {
         if (usb::cdcPayload::isPendingApply()) {
             usb::cdcPayload::applyLineCoding();
@@ -136,3 +143,37 @@ int main() {
 
     return 0;
 }
+
+extern "C" void RCC_IRQHandler(){
+    uint32_t rtcPreDiv = 0;
+    uint32_t zeroClock = 0;
+    if ( RCC->CIR & RCC_CIR_LSIRDYF ){
+        if ((RCC->BDCR&RCC_BDCR_RTCSEL_Msk)==0){
+            RCC->BDCR = RCC_BDCR_RTCEN | RCC_BDCR_RTCSEL_LSI | RCC_BDCR_LSEON;
+            RCC->CIR = (RCC->CIR & (~RCC_CIR_LSIRDYIE)) | RCC_CIR_LSIRDYC;
+            rtcPreDiv = 39999u;
+            zeroClock = 1693464085;
+        }
+    }
+    if ( RCC->CIR & RCC_CIR_LSERDYF ){
+        if ((RCC->BDCR&RCC_BDCR_RTCSEL_Msk)==0){
+            zeroClock = 1693464085;
+        }
+        RCC->BDCR = RCC_BDCR_RTCEN | RCC_BDCR_RTCSEL_LSE | RCC_BDCR_LSEON;
+        RCC->CIR = (RCC->CIR & (~RCC_CIR_LSERDYIE)) | RCC_CIR_LSERDYC;
+        rtcPreDiv = 0x7fffu;
+    }
+    if ( rtcPreDiv ){
+        while ((RTC->CRL&RTC_CRL_RTOFF)==0);
+        RTC->CRL = RTC_CRL_CNF;
+        RTC->PRLH = (rtcPreDiv >> 16);
+        RTC->PRLL = (rtcPreDiv & 0xffffu);
+        if ( zeroClock ){
+            RTC->CNTH = (zeroClock >> 16);
+            RTC->CNTL = (zeroClock & 0xffffu);
+        }
+        RTC->CRL = 0;
+        while ((RTC->CRL&RTC_CRL_CNF)!=0);
+    }
+}
+

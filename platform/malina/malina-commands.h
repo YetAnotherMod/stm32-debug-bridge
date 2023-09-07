@@ -1,5 +1,6 @@
 #include <global_resources.h>
 #include <static_map.h>
+#include <charconv>
 
 namespace commands{
 class CommandExecutor{
@@ -17,6 +18,7 @@ public:
         reset,
         help,
         save,
+        rtc,
         R
     };
     struct flags{
@@ -99,9 +101,11 @@ public:
             "ELOCK <0|1> - turn edcl on/off\r\n"
             "RESET <0|1> - turn nRST on/off\r\n"
             "SAVE - save control pins states\r\n"
+            "RTC - get time\r\n"
+            "RTC <time> - set time\r\n"
             "R - full power cycle\r\n"
             ""sv;
-        static constexpr staticMap::StaticMap<string_view, CommandType, 10, 4, hasher> commands(
+        static constexpr staticMap::StaticMap<string_view, CommandType, 11, 4, hasher> commands(
             {
                 {"LIST"sv,CommandType::list},
                 {"FAN"sv,CommandType::fan},
@@ -112,6 +116,7 @@ public:
                 {"HELP"sv,CommandType::help},
                 {"help"sv,CommandType::help},
                 {"SAVE"sv,CommandType::save},
+                {"RTC"sv,CommandType::rtc},
                 {"R"sv,CommandType::R}
             }
         );
@@ -264,6 +269,43 @@ public:
                     flash::Flash::pageErase(global::flashconfig);
                     flash::Flash::write(global::flashconfig,pinCfg);
                     flash::Flash::lock();
+                }
+            }
+            break;
+        case CommandType::rtc:
+            {
+                if ( argc == 1 ){
+                    RTC->CRL = 0;
+                    while((RTC->CRL&RTC_CRL_RSF)==0);
+                    uint32_t h,l,t;
+                    do{
+                        h = RTC->CNTH;
+                        l = RTC->CNTL;
+                        t = RTC->CNTH;
+                    }while(h!=t);
+                    t <<= 16;
+                    t |= l;
+                    char st[16];
+                    auto res = std::to_chars(st,st+sizeof(st),t);
+                    for (auto i:std::string_view(st,res.ptr))
+                        push(i);
+                }else if ( argc == 2 ){
+                    uint32_t time;
+                    auto res = std::from_chars(argv[1].data(),argv[1].data()+argv[1].size(),time);
+                    if ( res.ec  == std::errc() ){
+                        while ((RTC->CRL&RTC_CRL_RTOFF)==0);
+                        RTC->CRL = RTC_CRL_CNF;
+                        RTC->CNTH = (time >> 16);
+                        RTC->CNTL = (time & 0xffffu);
+                        RTC->CRL = 0;
+                        while ((RTC->CRL&RTC_CRL_CNF)!=0);
+                    }else{
+                        for (auto i:"error parameter"sv)
+                            push(i);
+                    }
+                }else{
+                    for (auto i:"error parameter"sv)
+                        push(i);
                 }
             }
             break;
