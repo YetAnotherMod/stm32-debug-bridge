@@ -41,13 +41,13 @@ enum class Port {
 
 enum class OutputSpeed { _10mhz = 0x1, _2mhz = 0x2, _50mhz = 0x3 };
 
-enum class InputType { analog = 0x0, floating = 0x1, pull_up_down = 0x2 };
+enum class InputType { analog = 0x0, floating = 0x4, pull_up_down = 0x8 };
 
 enum class OutputType {
     gen_pp = 0x0,
-    gen_od = 0x1,
-    alt_pp = 0x2,
-    alt_od = 0x3
+    gen_od = 0x4,
+    alt_pp = 0x8,
+    alt_od = 0xc
 };
 
 template <Port port, uint8_t... pins> class Bulk;
@@ -94,6 +94,8 @@ class Pin {
         getGpioPointer()->BSRR = v;
         __DMB();
     }
+    static constexpr uint32_t configShift = (pin%8) * 4;
+    static constexpr uint32_t configMask = ~(static_cast<uint32_t>(0xfu) << configShift);
 
   public:
     volatile GpioRegs *getGpioPointer() const {
@@ -129,38 +131,40 @@ class Pin {
         }
         return makeWriteWordLow();
     }
-    void configInput(InputType type) {
+    void configInput(InputType type) requires (pin < 8){
         volatile GpioRegs *p = getGpioPointer();
-        if (pin < 8) {
-            auto t = p->CRL;
-            t &= ~(0xfu << ((pin - 0) * 4));
-            t |= static_cast<uint32_t>(type) << ((pin - 0) * 4 + 2);
-            p->CRL = t;
-        } else {
-            auto t = p->CRH;
-            t &= ~(0xfu << ((pin - 8) * 4));
-            t |= static_cast<uint32_t>(type) << ((pin - 8) * 4 + 2);
-            p->CRH = t;
-        }
+        auto t = p->CRL;
+        t &= configMask;
+        t |= static_cast<uint32_t>(type) << configShift;
+        p->CRL = t;
         __DMB();
     }
-    void configOutput(OutputType type, OutputSpeed speed) {
+    void configInput(InputType type) requires (pin >= 8 && pin<16){
         volatile GpioRegs *p = getGpioPointer();
-        if (pin < 8) {
-            auto t = p->CRL;
-            t &= ~(0xfu << ((pin - 0) * 4));
-            t |= (static_cast<uint32_t>(speed) |
-                  (static_cast<uint32_t>(type) << 2))
-                 << ((pin - 0) * 4);
-            p->CRL = t;
-        } else {
-            auto t = p->CRH;
-            t &= ~(0xfu << ((pin - 8) * 4));
-            t |= (static_cast<uint32_t>(speed) |
-                  (static_cast<uint32_t>(type) << 2))
-                 << ((pin - 8) * 4);
-            p->CRH = t;
-        }
+        auto t = p->CRH;
+        t &= configMask;
+        t |= static_cast<uint32_t>(type) << configShift;
+        p->CRH = t;
+        __DMB();
+    }
+    void configOutput(OutputType type, OutputSpeed speed) requires (pin < 8){
+        volatile GpioRegs *p = getGpioPointer();
+        auto t = p->CRL;
+        t &= configMask;
+        t |= (static_cast<uint32_t>(speed) |
+              static_cast<uint32_t>(type))
+             << configShift;
+        p->CRL = t;
+        __DMB();
+    }
+    void configOutput(OutputType type, OutputSpeed speed) requires (pin >= 8 && pin < 16){
+        volatile GpioRegs *p = getGpioPointer();
+        auto t = p->CRH;
+        t &= ~(0xfu << ((pin - 8) * 4));
+        t |= (static_cast<uint32_t>(speed) |
+              static_cast<uint32_t>(type))
+             << configShift;
+        p->CRH = t;
         __DMB();
     }
     bool read() const {
@@ -207,7 +211,9 @@ class Pin {
 };
 
 #ifndef NDEBUG
-template <Port port, uint8_t pin> bool Pin<port, pin>::bisy = false;
+template <Port port, uint8_t pin>
+    requires (port < Port::end && pin < 16)
+bool Pin<port, pin>::bisy = false;
 #endif
 
 template <Port port, uint8_t... pins> class Bulk {
