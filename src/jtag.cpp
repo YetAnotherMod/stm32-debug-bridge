@@ -40,10 +40,18 @@ public:
     void execute_7(void){
         global::jtagOut.write(true, true, true);
     }
-    void execute_r(void){}
-    void execute_t(void){}
-    void execute_s(void){}
-    void execute_u(void){}
+    void execute_r(void){
+        config::reset (false,false);
+    }
+    void execute_s(void){
+        config::reset (false,true);
+    }
+    void execute_t(void){
+        config::reset (true,false);
+    }
+    void execute_u(void){
+        config::reset (true,true);
+    }
     void execute_scanIo(uint16_t count, uint8_t* buffer){
         scan<true,true>(count,buffer);
     }

@@ -30,6 +30,8 @@ static inline void Panic(void){
     ledOn();
 }
 
+static inline void reset([[maybe_unused]]bool trts, [[maybe_unused]]bool srst){}
+
 static inline void configInit(void){}
 
 } // namespace global

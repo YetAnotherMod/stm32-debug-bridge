@@ -54,6 +54,12 @@ static inline void PortsInit(void) {
 }
 
 static inline void Panic(void){}
+
+static inline void reset(bool trst, bool srst){
+    portPins.nRst.write ( !srst && portPins.pwrOn.read() );
+    portPins.jtagTrst.write ( !trst );
+}
+
 static inline void configInit(void){
     using namespace usb::cdcPayload;
     LineCoding x = { 1000000, CharFormat::stopBit1, ParityType::none, DataBits::bits8 };
