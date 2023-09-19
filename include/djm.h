@@ -140,31 +140,35 @@ public:
                 break;
             case State::len2:
                 count_ |= ((uint16_t)c)<<8;
-                ind_ = 0;
-                left_ = count_/8 + (count_%8?1:0);
-                switch( cmd ){
-                    case Command::scanIo:
-                    case Command::scanO:
-                    case Command::move:
-                        state = State::data;
-                        break;
-                    case Command::scanI:
-                        CE::execute_scanI(count_,buff_.data());
-                        CE::write(buff_.data(),left_);
-                        state = State::normal;
-                        break;
-                    case Command::speed:
-                        CE::execute_setSpeed(count_);
-                        state = State::normal;
-                        break;
-                    case Command::waitTicks:
-                        CE::execute_waitTicks(count_);
-                        state = State::normal;
-                        break;
-                    case Command::sleep:
-                        CE::execute_waitTime(count_);
-                        state = State::normal;
-                        break;
+                if ( count_ == 0 ){
+                    state = State::normal;
+                }else{
+                    ind_ = 0;
+                    left_ = count_/8 + (count_%8?1:0);
+                    switch( cmd ){
+                        case Command::scanIo:
+                        case Command::scanO:
+                        case Command::move:
+                            state = State::data;
+                            break;
+                        case Command::scanI:
+                            CE::execute_scanI(count_,buff_.data());
+                            CE::write(buff_.data(),left_);
+                            state = State::normal;
+                            break;
+                        case Command::speed:
+                            CE::execute_setSpeed(count_);
+                            state = State::normal;
+                            break;
+                        case Command::waitTicks:
+                            CE::execute_waitTicks(count_);
+                            state = State::normal;
+                            break;
+                        case Command::sleep:
+                            CE::execute_waitTime(count_);
+                            state = State::normal;
+                            break;
+                    }
                 }
                 break;
             case State::data:

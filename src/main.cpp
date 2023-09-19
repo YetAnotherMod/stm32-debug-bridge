@@ -150,10 +150,10 @@ extern "C" void RCC_IRQHandler(){
     if ( RCC->CIR & RCC_CIR_LSIRDYF ){
         if ((RCC->BDCR&RCC_BDCR_RTCSEL_Msk)==0){
             RCC->BDCR = RCC_BDCR_RTCEN | RCC_BDCR_RTCSEL_LSI | RCC_BDCR_LSEON;
-            RCC->CIR = (RCC->CIR & (~RCC_CIR_LSIRDYIE)) | RCC_CIR_LSIRDYC;
             rtcPreDiv = 39999u;
             zeroClock = 1693464085;
         }
+        RCC->CIR = (RCC->CIR & (~RCC_CIR_LSIRDYIE)) | RCC_CIR_LSIRDYC;
     }
     if ( RCC->CIR & RCC_CIR_LSERDYF ){
         if ((RCC->BDCR&RCC_BDCR_RTCSEL_Msk)==0){
