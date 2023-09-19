@@ -10,6 +10,12 @@ endif(NOT CMAKE_TOOLCHAIN_FILE)
 
 project (debug-bridge ASM C CXX)
 
+find_program(CLANG_TIDY clang-tidy clang-tidy-15 clang-tidy-14 clang-tidy-11 clang-tidy-9)
+if(CLANG_TIDY)
+    set(CMAKE_C_CLANG_TIDY ${CLANG_TIDY})
+    set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY})
+endif(CLANG_TIDY)
+
 if(NOT PLATFORM)
 	set (PLATFORM stlink-v2-dupboot)
 endif(NOT PLATFORM)

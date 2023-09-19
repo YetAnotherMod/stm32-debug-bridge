@@ -120,23 +120,23 @@ static volatile io::bTableEntity *const bTable =
 
 static inline const io::pBufferData *rxBuf(std::uint8_t epNum) {
     return reinterpret_cast<io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].rxOffset * 2));
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].rxOffset.data * 2));
 }
 static inline io::pBufferData *txBuf(std::uint8_t epNum) {
     return reinterpret_cast<io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].txOffset * 2));
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].txOffset.data * 2));
 }
 
 static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     const io::pBufferData *epBuf = rxBuf(epNum_);
-    const uint16_t rxCount = bTable[epNum_].rxCount;
+    const uint16_t rxCount = bTable[epNum_].rxCount.data;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
     uint16_t *bufP = reinterpret_cast<uint16_t *>(buf);
     if (bufSize < epBytesCount) {
         return -1;
     }
-    bTable[epNum_].rxCount =
+    bTable[epNum_].rxCount.data =
         rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
     for (unsigned i = epBytesCount / 2; i > 0; --i) {
         *bufP++ = (epBuf++)->data;
@@ -160,7 +160,7 @@ static size_t write(descriptor::EndpointIndex epNum, const void *buf,
     for (unsigned i = (count + 1) / 2; i > 0; --i) {
         (epBuf++)->data = *bufP++;
     }
-    bTable[epNum_].txCount = count;
+    bTable[epNum_].txCount.data = count;
     epState::setTx(epNum, epState::txState::valid);
     return count;
 }
@@ -169,14 +169,14 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
                          fifo::Fifo<uint8_t, global::cdcFifoLenTx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     const io::pBufferData *epBuf = rxBuf(epNum_);
-    const uint16_t rxCount = bTable[epNum_].rxCount;
+    const uint16_t rxCount = bTable[epNum_].rxCount.data;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
 
     if (epBytesCount > data.capacity() - data.size()) {
         return 0;
     }
 
-    bTable[epNum_].rxCount =
+    bTable[epNum_].rxCount.data =
         rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
     for (size_t wordsLeft = epBytesCount / 2; wordsLeft > 0; --wordsLeft) {
         uint16_t x = *epBuf;
@@ -206,7 +206,7 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
     if (count % 2) {
         epBuf->data = data.pop();
     }
-    bTable[epNum_].txCount = count;
+    bTable[epNum_].txCount.data = count;
     epState::setTx(epNum, epState::txState::valid);
     return count;
 }
@@ -591,18 +591,18 @@ void reset(void) {
          epNum < static_cast<std::ptrdiff_t>(descriptor::EndpointIndex::last);
          epNum++) {
 
-        bTable[epNum].txOffset = offset;
-        bTable[epNum].txCount = 0;
+        bTable[epNum].txOffset.data = offset;
+        bTable[epNum].txCount.data = 0;
         offset += endpoints[epNum].txSize;
 
-        bTable[epNum].rxOffset = offset;
+        bTable[epNum].rxOffset.data = offset;
         if (endpoints[epNum].rxSize > io::smallBlockSizeLimit) {
-            bTable[epNum].rxCount =
+            bTable[epNum].rxCount.data =
                 ((endpoints[epNum].rxSize / io::largeBlockSize - 1)
                  << USB_COUNT0_RX_NUM_BLOCK_Pos) |
                 USB_COUNT0_RX_BLSIZE;
         } else {
-            bTable[epNum].rxCount =
+            bTable[epNum].rxCount.data =
                 (endpoints[epNum].rxSize / io::smallBlockSize)
                 << USB_COUNT0_RX_NUM_BLOCK_Pos;
         }

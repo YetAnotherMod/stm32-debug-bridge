@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <concepts>
 
 #include PLATFORM_HEADER
 
@@ -217,8 +218,7 @@ template <char16_t... chars> struct String : Base {
     constexpr String() : Base(sizeof(*this), Type::string), wString{chars...} {}
 } __attribute__((aligned(4)));
 
-template <typename CharT, CharT... chars> String<chars...> operator"" _sd() {
-    static_assert(sizeof(CharT) == 2, "must be utf16 string");
+template <std::convertible_to<char16_t> T, T... chars> auto operator"" _sd() {
     return String<chars...>();
 }
 
@@ -276,23 +276,12 @@ static_assert(alignof(Setup) == 1, "bad align");
 
 namespace io {
 
-using pbAlignedWord = std::uint16_t __attribute__((aligned(4)));
-static_assert(sizeof(pbAlignedWord) == 2);
-static_assert(alignof(pbAlignedWord) == 4);
-
-struct bTableEntity {
-    pbAlignedWord txOffset;
-    pbAlignedWord txCount;
-    pbAlignedWord rxOffset;
-    pbAlignedWord rxCount;
-};
-
-static_assert(sizeof(bTableEntity) == 16);
-static_assert(alignof(bTableEntity) == 4);
-
 struct pBufferData {
-    pbAlignedWord data;
-    uint16_t &operator=(uint16_t v) { return data = v; }
+    union {
+        uint16_t data;
+        uint32_t adata;
+    };
+    uint16_t operator=(uint16_t v) { return data = v; }
     operator uint16_t() const { return data; }
 };
 
@@ -300,12 +289,19 @@ static_assert(sizeof(pBufferData) == 4);
 static_assert(sizeof(pBufferData[4]) == 16);
 static_assert(alignof(pBufferData) == 4);
 
+struct bTableEntity {
+    pBufferData txOffset;
+    pBufferData txCount;
+    pBufferData rxOffset;
+    pBufferData rxCount;
+};
+
 constexpr size_t smallBlockSize = 2;
 constexpr size_t largeBlockSize = 32;
 constexpr size_t smallBlockSizeLimit =
     ((USB_COUNT0_RX_NUM_BLOCK_Msk >> USB_COUNT0_RX_NUM_BLOCK_Pos) << 1);
 
-constexpr volatile uint16_t &epRegs(uint16_t num) {
+static inline volatile uint16_t &epRegs(uint16_t num) {
     return (&USB->EP0R)[num * 2];
 }
 
