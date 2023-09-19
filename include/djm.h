@@ -193,7 +193,10 @@ public:
                 break;
         };
     }
-    Packets(auto&&... args):CE(std::forward<decltype(args)>(args)...),state(State::normal){}
+    constexpr Packets(auto&&... args):CE(std::forward<decltype(args)>(args)...),state(State::normal){}
+    void reset(void){
+        state = State::normal;
+    }
 private:
     std::array<uint8_t,bufLen> buff_;
     uint16_t count_;

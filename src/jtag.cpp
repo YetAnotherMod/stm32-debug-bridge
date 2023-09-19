@@ -104,8 +104,11 @@ public:
         global::jtagOut.write<2>(true);
     }
 };
+static djm::Packets<Executor> executor;
 void tick(char c) {
-    static djm::Packets<Executor> executor;
     executor.exec(c);
+}
+void reset (void){
+    executor.reset();
 }
 } // namespace jtag

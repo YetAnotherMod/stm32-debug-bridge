@@ -4,6 +4,7 @@
 #include <fifo.h>
 #include <global_resources.h>
 #include <gpio.h>
+#include <jtag.h>
 
 #include <algorithm>
 
@@ -217,10 +218,22 @@ enum class status { ack = 0x00, nak = 0x01, fail = 0x02 };
 static status processRequest() {
     if ((controlState.setup.type == Setup::type_class) &&
         (controlState.setup.recipient == Setup::recipient_interface)) {
-        if ((controlState.setup.wIndex ==
-             static_cast<uint16_t>(descriptor::InterfaceIndex::jtag)) ||
-            (controlState.setup.wIndex ==
-             static_cast<uint16_t>(descriptor::InterfaceIndex::shell))) {
+        if (controlState.setup.wIndex ==
+             static_cast<uint16_t>(descriptor::InterfaceIndex::jtag)) {
+            if ( static_cast<cdc::Request>(controlState.setup.bRequest) ==
+                cdc::Request::set_line_coding ) {
+                global::jtagTx.clear();
+                global::jtagRx.clear();
+                jtag::reset();
+            }
+            return status::ack;
+        }else if (controlState.setup.wIndex ==
+             static_cast<uint16_t>(descriptor::InterfaceIndex::shell)) {
+            if ( static_cast<cdc::Request>(controlState.setup.bRequest) ==
+                cdc::Request::set_line_coding ) {
+                global::shellTx.clear();
+                global::shellRx.clear();
+            }
             return status::ack;
         } else if (controlState.setup.wIndex ==
                    static_cast<uint16_t>(descriptor::InterfaceIndex::uart)) {
