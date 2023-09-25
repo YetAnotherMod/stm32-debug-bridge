@@ -1,4 +1,4 @@
 ---
-Checks:           'clang-analyzer-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
+Checks:           '-*,bugprone-*,cert-*,clang-analyzer-*,-google,-android,-clang-analyzer-fuchsia,-clang-analyzer-optin,-clang-analyzer-osx,-clang-analyzer-webkit,concurrency-*,cppcoreguidelines-*,hicpp-*,misc-*,performance-*,portability-*,readability-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
 ExtraArgs:        ['--target=thumbv7m-none-none-eabi','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/../../../arm-none-eabi/include/c++/10.3.1','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/../../../arm-none-eabi/include/c++/10.3.1/arm-none-eabi','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/../../../arm-none-eabi/include/c++/10.3.1/backward','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/include','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/include-fixed','-isystem','/usr/lib/gcc/arm-none-eabi/10.3.1/../../../arm-none-eabi/include']
 ...
