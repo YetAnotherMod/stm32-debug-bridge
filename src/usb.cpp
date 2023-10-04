@@ -5,6 +5,7 @@
 #include <global_resources.h>
 #include <gpio.h>
 #include <jtag.h>
+#include <systick-wait.h>
 
 #include <algorithm>
 
@@ -22,9 +23,9 @@ struct DeviceState {
     uint8_t configuration;
 };
 static DeviceState deviceState;
-bool uartTxProcessing;
-bool shellTxProcessing;
-bool jtagTxProcessing;
+static volatile bool uartTxProcessing;
+static volatile bool shellTxProcessing;
+static volatile bool jtagTxProcessing;
 
 struct ControlState {
     enum class State { idle, rx, tx, txZlp, txLast, statusIn, statusOut };
@@ -66,6 +67,16 @@ static inline rxState getRx(descriptor::EndpointIndex epNum) {
     return static_cast<rxState>(state);
 }
 
+static inline void setRxAck(descriptor::EndpointIndex epNum){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto epReg_ = epReg;
+    if ( (epReg_&USB_EPRX_STAT_Msk) == USB_EP_RX_NAK ){
+        epReg_ &= USB_EPREG_MASK;
+        epReg_ |= USB_EPRX_DTOG1;
+        epReg = epReg_;
+    }
+}
+
 static inline void setTx(descriptor::EndpointIndex epNum, txState state) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto epReg_ = epReg;
@@ -78,6 +89,16 @@ static inline txState getTx(descriptor::EndpointIndex epNum) {
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto state = epReg & USB_EPTX_STAT_Msk;
     return static_cast<txState>(state);
+}
+
+static inline void setTxAck(descriptor::EndpointIndex epNum){
+    auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
+    auto epReg_ = epReg;
+    if ( (epReg_&USB_EPTX_STAT_Msk) == USB_EP_TX_NAK ){
+        epReg_ &= USB_EPREG_MASK;
+        epReg_ |= USB_EPTX_DTOG1;
+        epReg = epReg_;
+    }
 }
 
 } // namespace epState
@@ -144,7 +165,7 @@ static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     if (epBytesCount % 2) {
         *reinterpret_cast<uint8_t *>(bufP) = static_cast<uint8_t>(epBuf->data);
     }
-    epState::setRx(epNum, epState::rxState::valid);
+    epState::setRxAck(epNum);
     return epBytesCount;
 }
 
@@ -161,7 +182,7 @@ static size_t write(descriptor::EndpointIndex epNum, const void *buf,
         (epBuf++)->data = *bufP++;
     }
     bTable[epNum_].txCount.data = count;
-    epState::setTx(epNum, epState::txState::valid);
+    epState::setTxAck(epNum);
     return count;
 }
 
@@ -187,7 +208,7 @@ static size_t readToFifo(descriptor::EndpointIndex epNum,
         data.push(epBuf->data);
     }
     if(data.capacity() - data.size() >= descriptor::endpoints[epNum_].rxSize){
-        epState::setRx(epNum, epState::rxState::valid);
+        epState::setRxAck(epNum);
     }
     return epBytesCount;
 }
@@ -199,15 +220,15 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
         std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
     io::pBufferData *epBuf = txBuf(epNum_);
     for (size_t wordsLeft = count / 2; wordsLeft > 0; --wordsLeft) {
-	uint16_t x = data.pop();
-	x |= static_cast<uint16_t>(data.pop())<<8;
+        uint16_t x = data.pop();
+        x |= static_cast<uint16_t>(data.pop())<<8;
         *epBuf++ = x;
     }
     if (count % 2) {
         epBuf->data = data.pop();
     }
     bTable[epNum_].txCount.data = count;
-    epState::setTx(epNum, epState::txState::valid);
+    epState::setTxAck(epNum);
     return count;
 }
 
@@ -222,8 +243,6 @@ static status processRequest() {
              static_cast<uint16_t>(descriptor::InterfaceIndex::jtag)) {
             if ( static_cast<cdc::Request>(controlState.setup.bRequest) ==
                 cdc::Request::set_line_coding ) {
-                global::jtagTx.clear();
-                global::jtagRx.clear();
                 jtag::reset();
             }
             return status::ack;
@@ -231,8 +250,6 @@ static status processRequest() {
              static_cast<uint16_t>(descriptor::InterfaceIndex::shell)) {
             if ( static_cast<cdc::Request>(controlState.setup.bRequest) ==
                 cdc::Request::set_line_coding ) {
-                global::shellTx.clear();
-                global::shellRx.clear();
             }
             return status::ack;
         } else if (controlState.setup.wIndex ==
@@ -514,19 +531,33 @@ void regenerateTx(void) {
         epState::getRx(epNum) == epState::rxState::nak &&
         ((global::uartTx.capacity() - global::uartTx.size()) >=
          descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
-        epState::setRx(epNum, epState::rxState::valid);
+        epState::setRxAck(epNum);
     }
     if (auto epNum = descriptor::EndpointIndex::shellData;
         epState::getRx(epNum) == epState::rxState::nak &&
         ((global::shellTx.capacity() - global::shellTx.size()) >=
          descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
-        epState::setRx(epNum, epState::rxState::valid);
+        epState::setRxAck(epNum);
     }
     if (auto epNum = descriptor::EndpointIndex::jtagData;
         epState::getRx(epNum) == epState::rxState::nak &&
         ((global::jtagTx.capacity() - global::jtagTx.size()) >=
          descriptor::endpoints[static_cast<uint8_t>(epNum)].rxSize)) {
-        epState::setRx(epNum, epState::rxState::valid);
+        epState::setRxAck(epNum);
+    }
+}
+void regenerateRx(void){
+    if (!global::uartRx.empty()) {
+        usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,
+                          global::uartRx);
+    }
+    if (!global::shellRx.empty()) {
+        usb::sendFromFifo(usb::descriptor::InterfaceIndex::shell,
+                          global::shellRx);
+    }
+    if (!global::jtagRx.empty()) {
+        usb::sendFromFifo(usb::descriptor::InterfaceIndex::jtag,
+                          global::jtagRx);
     }
 }
 
@@ -556,15 +587,7 @@ void init(void) {
     global::usbPins.configOutput<1>(gpio::OutputType::gen_pp,
                                     gpio::OutputSpeed::_2mhz);
 
-    SysTick->CTRL = 0x00;
-    SysTick->LOAD = (SystemCoreClock/8/100)-1;
-    SysTick->VAL = 0x00;
-    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
-
-
-    while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0)
-        ;
-    SysTick->CTRL = 0x00;
+    systickWait(10000000,[](){return true;},[](){});
 
     global::usbPins.configInput<0>(gpio::InputType::floating);
     global::usbPins.configInput<1>(gpio::InputType::floating);
@@ -672,19 +695,19 @@ void polling(void) {
         if (istr & USB_ISTR_CTR) {
             uint16_t epNum = (istr & USB_ISTR_EP_ID_Msk) >> USB_ISTR_EP_ID_Pos;
             auto epReg = usb::io::epRegs(epNum);
+            epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk | USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk | USB_EPADDR_FIELD_Msk);
             usb::io::epRegs(epNum) =
-                epReg &
-                (USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk | USB_EPADDR_FIELD_Msk);
-            epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk);
+                epReg ^ (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk);
             if (epReg & USB_EP_CTR_TX) {
                 if (endpoints[epNum].txHandler) {
                     endpoints[epNum].txHandler();
                 }
-            } else if (epReg & USB_EP_SETUP) {
+            }
+            if (epReg & USB_EP_SETUP) {
                 if (endpoints[epNum].setupHandler) {
                     endpoints[epNum].setupHandler();
                 }
-            } else {
+            } else if (epReg & USB_EP_CTR_RX) {
                 if (endpoints[epNum].rxHandler) {
                     endpoints[epNum].rxHandler();
                 }

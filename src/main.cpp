@@ -118,27 +118,13 @@ int main() {
             }
         }
 
-        usb::regenerateTx();
         while( !global::shellTx.empty() )
         {
             deviceShell::tick(global::shellTx.pop());
         }
-        while ( !global::jtagTx.empty() )
-        {
-            jtag::tick(global::jtagTx.pop());
-        }
-        if (!global::uartRx.empty()) {
-            usb::sendFromFifo(usb::descriptor::InterfaceIndex::uart,
-                              global::uartRx);
-        }
-        if (!global::shellRx.empty()) {
-            usb::sendFromFifo(usb::descriptor::InterfaceIndex::shell,
-                              global::shellRx);
-        }
-        if (!global::jtagRx.empty()) {
-            usb::sendFromFifo(usb::descriptor::InterfaceIndex::jtag,
-                              global::jtagRx);
-        }
+        jtag::tick();
+        usb::regenerateRx();
+        usb::regenerateTx();
     }
 
     return 0;

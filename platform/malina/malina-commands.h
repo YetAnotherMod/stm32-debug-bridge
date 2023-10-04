@@ -3,7 +3,8 @@
 #include <charconv>
 
 namespace commands{
-class CommandExecutor{
+template <typename backend>
+class CommandExecutor : public backend {
 public:
     CommandExecutor(void){
         readPorts();
@@ -39,9 +40,6 @@ public:
            return result;
         }
     };
-    void push (char c){
-        global::shellRx.pushSafe(c);
-    }
     static void readPorts(void){
         using namespace config;
         powerOff();
@@ -132,14 +130,14 @@ public:
         switch (c){
         case CommandType::invalid:
             for (uint8_t i:error)
-                push(i);
+                backend::push(i);
             for (uint8_t i:argv[0])
-                push(i);
+                backend::push(i);
             break;
         case CommandType::list:
             {
                 for (uint8_t i:list)
-                    push(i);
+                    backend::push(i);
             }
             break;
         case CommandType::fan:
@@ -151,15 +149,15 @@ public:
                     x = true;
                 }else{
                     for (uint8_t i:errorParam)
-                        push(i);
+                        backend::push(i);
                     break;
                 }
                 for (uint8_t i:argv[0])
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:setTo)
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:argv[1])
-                    push(i);
+                    backend::push(i);
                 portPins.fanPwm.write(x);
                 portPins.fanEn.write(x);
             }
@@ -173,15 +171,15 @@ public:
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        push(i);
+                        backend::push(i);
                     break;
                 }
                 for (uint8_t i:argv[0])
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:setTo)
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:argv[1])
-                    push(i);
+                    backend::push(i);
                 if ( x )
                     powerOn();
                 else
@@ -197,15 +195,15 @@ public:
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        push(i);
+                        backend::push(i);
                     break;
                 }
                 for (uint8_t i:argv[0])
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:setTo)
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:argv[1])
-                    push(i);
+                    backend::push(i);
                 portPins.hostMode.write(x);
             }
             break;
@@ -218,15 +216,15 @@ public:
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        push(i);
+                        backend::push(i);
                     break;
                 }
                 for (uint8_t i:argv[0])
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:setTo)
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:argv[1])
-                    push(i);
+                    backend::push(i);
                 portPins.edclLock.write(x);
             }
             break;
@@ -239,22 +237,22 @@ public:
                     x = true;
                 }else{
                     for (uint8_t i:switchNo)
-                        push(i);
+                        backend::push(i);
                     break;
                 }
                 for (uint8_t i:argv[0])
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:setTo)
-                    push(i);
+                    backend::push(i);
                 for (uint8_t i:argv[1])
-                    push(i);
+                    backend::push(i);
                 portPins.nRst.write(x);
             }
             break;
         case CommandType::help:
             {
                 for (uint8_t i:help)
-                    push(i);
+                    backend::push(i);
             }
             break;
         case CommandType::save:
@@ -288,7 +286,7 @@ public:
                     char st[16];
                     auto res = std::to_chars(st,st+sizeof(st),t);
                     for (auto i:std::string_view(st,res.ptr))
-                        push(i);
+                        backend::push(i);
                 }else if ( argc == 2 ){
                     uint32_t time;
                     auto res = std::from_chars(argv[1].data(),argv[1].data()+argv[1].size(),time);
@@ -301,11 +299,11 @@ public:
                         while ((RTC->CRL&RTC_CRL_CNF)!=0);
                     }else{
                         for (auto i:"error parameter"sv)
-                            push(i);
+                            backend::push(i);
                     }
                 }else{
                     for (auto i:"error parameter"sv)
-                        push(i);
+                        backend::push(i);
                 }
             }
             break;
@@ -331,8 +329,8 @@ public:
             }
             break;
         }
-        push('\r');
-        push('\n');
+        backend::push('\r');
+        backend::push('\n');
     }
 private:
     static void powerOn (){
