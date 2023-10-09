@@ -70,11 +70,9 @@ static inline rxState getRx(descriptor::EndpointIndex epNum) {
 static inline void setRxAck(descriptor::EndpointIndex epNum){
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto epReg_ = epReg;
-    if ( (epReg_&USB_EPRX_STAT_Msk) == USB_EP_RX_NAK ){
         epReg_ &= USB_EPREG_MASK;
-        epReg_ |= USB_EPRX_DTOG1;
+        epReg_ |= USB_EPRX_DTOG1 | USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk;
         epReg = epReg_;
-    }
 }
 
 static inline void setTx(descriptor::EndpointIndex epNum, txState state) {
@@ -94,11 +92,9 @@ static inline txState getTx(descriptor::EndpointIndex epNum) {
 static inline void setTxAck(descriptor::EndpointIndex epNum){
     auto &epReg = io::epRegs(static_cast<ptrdiff_t>(epNum));
     auto epReg_ = epReg;
-    if ( (epReg_&USB_EPTX_STAT_Msk) == USB_EP_TX_NAK ){
         epReg_ &= USB_EPREG_MASK;
-        epReg_ |= USB_EPTX_DTOG1;
+        epReg_ |= USB_EPTX_DTOG1 | USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk;
         epReg = epReg_;
-    }
 }
 
 } // namespace epState
@@ -139,31 +135,31 @@ static inline bool endpointGetStall(descriptor::EndpointIndex epNum,
 static volatile io::bTableEntity *const bTable =
     reinterpret_cast<io::bTableEntity *>(static_cast<uintptr_t>(USB_PMAADDR));
 
-static inline const io::pBufferData *rxBuf(std::uint8_t epNum) {
-    return reinterpret_cast<io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].rxOffset.data * 2));
+static inline const volatile uint32_t *rxBuf(std::uint8_t epNum) {
+    return reinterpret_cast<volatile uint32_t *>(
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].rxOffset * 2));
 }
-static inline io::pBufferData *txBuf(std::uint8_t epNum) {
-    return reinterpret_cast<io::pBufferData *>(
-        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].txOffset.data * 2));
+static inline volatile uint32_t *txBuf(std::uint8_t epNum) {
+    return reinterpret_cast<volatile uint32_t *>(
+        static_cast<uintptr_t>(USB_PMAADDR + bTable[epNum].txOffset * 2));
 }
 
 static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
-    const io::pBufferData *epBuf = rxBuf(epNum_);
-    const uint16_t rxCount = bTable[epNum_].rxCount.data;
+    const volatile uint32_t *epBuf = rxBuf(epNum_);
+    const uint16_t rxCount = bTable[epNum_].rxCount;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
-    uint16_t *bufP = reinterpret_cast<uint16_t *>(buf);
+    uint8_t *bufP = static_cast<uint8_t *>(buf);
     if (bufSize < epBytesCount) {
         return -1;
     }
-    bTable[epNum_].rxCount.data =
-        rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
     for (unsigned i = epBytesCount / 2; i > 0; --i) {
-        *bufP++ = (epBuf++)->data;
+        uint32_t x = *epBuf++;
+        *bufP++ = static_cast<uint8_t>(x);
+        *bufP++ = static_cast<uint8_t>(x>>8);
     }
     if (epBytesCount % 2) {
-        *reinterpret_cast<uint8_t *>(bufP) = static_cast<uint8_t>(epBuf->data);
+        *bufP = static_cast<uint8_t>(*epBuf);
     }
     epState::setRxAck(epNum);
     return epBytesCount;
@@ -172,45 +168,43 @@ static int read(descriptor::EndpointIndex epNum, void *buf, size_t bufSize) {
 static size_t write(descriptor::EndpointIndex epNum, const void *buf,
                     size_t count) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
-    io::pBufferData *epBuf = txBuf(epNum_);
-    const uint16_t *bufP = reinterpret_cast<const uint16_t *>(buf);
+    volatile uint32_t *epBuf = txBuf(epNum_);
+    const uint8_t *bufP = static_cast<const uint8_t *>(buf);
     const size_t txSize = descriptor::endpoints[epNum_].txSize;
     if (count > txSize) {
         count = txSize;
     }
     for (unsigned i = (count + 1) / 2; i > 0; --i) {
-        (epBuf++)->data = *bufP++;
+        uint32_t x = *bufP++;
+        x |= static_cast<uint32_t>(*bufP++)<<8;
+        *epBuf++ = x;
     }
-    bTable[epNum_].txCount.data = count;
+    bTable[epNum_].txCount = count;
     epState::setTxAck(epNum);
     return count;
 }
 
-static size_t readToFifo(descriptor::EndpointIndex epNum,
+static bool readToFifo(descriptor::EndpointIndex epNum,
                          fifo::Fifo<uint8_t, global::cdcFifoLenTx> &data) {
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
-    const io::pBufferData *epBuf = rxBuf(epNum_);
-    const uint16_t rxCount = bTable[epNum_].rxCount.data;
+    const volatile uint32_t *epBuf = rxBuf(epNum_);
+    const uint16_t rxCount = bTable[epNum_].rxCount;
     const uint16_t epBytesCount = rxCount & USB_COUNT0_RX_COUNT0_RX;
 
-    if (epBytesCount > data.capacity() - data.size()) {
-        return 0;
-    }
-
-    bTable[epNum_].rxCount.data =
-        rxCount & static_cast<uint16_t>(~USB_COUNT0_RX_COUNT0_RX);
     for (size_t wordsLeft = epBytesCount / 2; wordsLeft > 0; --wordsLeft) {
-        uint16_t x = *epBuf;
-        data.write(static_cast<const uint8_t *>(static_cast<const void *>(&x)), 2);
+        uint32_t x = *epBuf;
+        data.push(x&0xff);
+        data.push(x>>8);
         epBuf++;
     }
     if (epBytesCount % 2) {
-        data.push(epBuf->data);
+        data.push(*epBuf);
     }
     if(data.capacity() - data.size() >= descriptor::endpoints[epNum_].rxSize){
-        epState::setRxAck(epNum);
+        return true;
+    }else{
+        return false;
     }
-    return epBytesCount;
 }
 
 size_t writeFromFifo(descriptor::EndpointIndex epNum,
@@ -218,16 +212,16 @@ size_t writeFromFifo(descriptor::EndpointIndex epNum,
     const ptrdiff_t epNum_ = static_cast<ptrdiff_t>(epNum);
     size_t count =
         std::min<size_t>(descriptor::endpoints[epNum_].txSize, data.size());
-    io::pBufferData *epBuf = txBuf(epNum_);
+    volatile uint32_t *epBuf = txBuf(epNum_);
     for (size_t wordsLeft = count / 2; wordsLeft > 0; --wordsLeft) {
         uint16_t x = data.pop();
         x |= static_cast<uint16_t>(data.pop())<<8;
         *epBuf++ = x;
     }
     if (count % 2) {
-        epBuf->data = data.pop();
+        *epBuf = data.pop();
     }
-    bTable[epNum_].txCount.data = count;
+    bTable[epNum_].txCount = count;
     epState::setTxAck(epNum);
     return count;
 }
@@ -243,7 +237,6 @@ static status processRequest() {
              static_cast<uint16_t>(descriptor::InterfaceIndex::jtag)) {
             if ( static_cast<cdc::Request>(controlState.setup.bRequest) ==
                 cdc::Request::set_line_coding ) {
-                jtag::reset();
             }
             return status::ack;
         }else if (controlState.setup.wIndex ==
@@ -488,8 +481,9 @@ void controlSetupHandler() {
 }
 
 void uartRxHandler() {
-    if (!cdcPayload::isPendingApply()) {
-        readToFifo(descriptor::EndpointIndex::uartData, global::uartTx);
+    if (!cdcPayload::isPendingApply() &&
+            readToFifo(descriptor::EndpointIndex::uartData, global::uartTx) ){
+        epState::setRxAck(descriptor::EndpointIndex::uartData);
     }
 }
 
@@ -503,7 +497,9 @@ void uartTxHandler() {
 void uartInterruptHandler() { ; }
 
 void shellRxHandler() {
-    readToFifo(descriptor::EndpointIndex::shellData, global::shellTx);
+    if ( readToFifo(descriptor::EndpointIndex::shellData, global::shellTx) ){
+        epState::setRxAck(descriptor::EndpointIndex::shellData);
+    }
 }
 void shellTxHandler() {
     if (!global::shellRx.empty()) {
@@ -515,7 +511,9 @@ void shellTxHandler() {
 void shellInterruptHandler() { ; }
 
 void jtagRxHandler() {
-    readToFifo(descriptor::EndpointIndex::jtagData, global::jtagTx);
+    if ( readToFifo(descriptor::EndpointIndex::jtagData, global::jtagTx)){
+        epState::setRxAck(descriptor::EndpointIndex::jtagData);
+    }
 }
 void jtagTxHandler() {
     if (!global::jtagRx.empty()) {
@@ -614,18 +612,18 @@ void reset(void) {
          epNum < static_cast<std::ptrdiff_t>(descriptor::EndpointIndex::last);
          epNum++) {
 
-        bTable[epNum].txOffset.data = offset;
-        bTable[epNum].txCount.data = 0;
+        bTable[epNum].txOffset = offset;
+        bTable[epNum].txCount = 0;
         offset += endpoints[epNum].txSize;
 
-        bTable[epNum].rxOffset.data = offset;
+        bTable[epNum].rxOffset = offset;
         if (endpoints[epNum].rxSize > io::smallBlockSizeLimit) {
-            bTable[epNum].rxCount.data =
+            bTable[epNum].rxCount =
                 ((endpoints[epNum].rxSize / io::largeBlockSize - 1)
                  << USB_COUNT0_RX_NUM_BLOCK_Pos) |
                 USB_COUNT0_RX_BLSIZE;
         } else {
-            bTable[epNum].rxCount.data =
+            bTable[epNum].rxCount =
                 (endpoints[epNum].rxSize / io::smallBlockSize)
                 << USB_COUNT0_RX_NUM_BLOCK_Pos;
         }
@@ -663,7 +661,7 @@ static inline bool isAcmReadyToSend(descriptor::InterfaceIndex ind) {
 
 bool sendFromFifo(descriptor::InterfaceIndex ind,
                   fifo::Fifo<std::uint8_t, global::cdcFifoLenRx> &buf) {
-    if (isAcmReadyToSend(ind)) {
+    if (isAcmReadyToSend(ind)&&(!buf.empty())) {
         descriptor::EndpointIndex ep = [](descriptor::InterfaceIndex ind) {
             switch (ind) {
             case descriptor::InterfaceIndex::uart:
@@ -695,21 +693,24 @@ void polling(void) {
         if (istr & USB_ISTR_CTR) {
             uint16_t epNum = (istr & USB_ISTR_EP_ID_Msk) >> USB_ISTR_EP_ID_Pos;
             auto epReg = usb::io::epRegs(epNum);
-            epReg &= (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk | USB_EP_SETUP_Msk | USB_EP_T_FIELD_Msk | USB_EP_KIND_Msk | USB_EPADDR_FIELD_Msk);
-            usb::io::epRegs(epNum) =
-                epReg ^ (USB_EP_CTR_TX_Msk | USB_EP_CTR_RX_Msk);
-            if (epReg & USB_EP_CTR_TX) {
+            epReg &= USB_EPREG_MASK;
+            if ( istr & USB_ISTR_DIR_Msk ){
+                usb::io::epRegs(epNum) =
+                    ( epReg | USB_EP_CTR_TX_Msk ) & (~USB_EP_CTR_RX_Msk);
+                if (epReg & USB_EP_SETUP) {
+                    if (endpoints[epNum].setupHandler) {
+                        endpoints[epNum].setupHandler();
+                    }
+                } else if (epReg & USB_EP_CTR_RX) {
+                    if (endpoints[epNum].rxHandler) {
+                        endpoints[epNum].rxHandler();
+                    }
+                }
+            }else{
+                usb::io::epRegs(epNum) =
+                    ( epReg | USB_EP_CTR_RX_Msk ) & (~USB_EP_CTR_TX_Msk);
                 if (endpoints[epNum].txHandler) {
                     endpoints[epNum].txHandler();
-                }
-            }
-            if (epReg & USB_EP_SETUP) {
-                if (endpoints[epNum].setupHandler) {
-                    endpoints[epNum].setupHandler();
-                }
-            } else if (epReg & USB_EP_CTR_RX) {
-                if (endpoints[epNum].rxHandler) {
-                    endpoints[epNum].rxHandler();
                 }
             }
         } else if (istr & USB_ISTR_RESET) {
@@ -717,11 +718,8 @@ void polling(void) {
             usb::reset();
         } else if (istr & USB_ISTR_SUSP) {
             USB->ISTR = (uint16_t)(~USB_ISTR_SUSP);
-            USB->CNTR = USB->CNTR | USB_CNTR_FSUSP;
-            USB->DADDR = USB_DADDR_EF;
         } else if (istr & USB_ISTR_WKUP) {
             USB->ISTR = (uint16_t)(~USB_ISTR_WKUP);
-            USB->CNTR = USB->CNTR & ~USB_CNTR_FSUSP;
         }
     }
 }

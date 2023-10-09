@@ -276,24 +276,11 @@ static_assert(alignof(Setup) == 1, "bad align");
 
 namespace io {
 
-struct pBufferData {
-    union {
-        uint16_t data;
-        uint32_t adata;
-    };
-    uint16_t operator=(uint16_t v) { return data = v; }
-    operator uint16_t() const { return data; }
-};
-
-static_assert(sizeof(pBufferData) == 4);
-static_assert(sizeof(pBufferData[4]) == 16);
-static_assert(alignof(pBufferData) == 4);
-
 struct bTableEntity {
-    pBufferData txOffset;
-    pBufferData txCount;
-    pBufferData rxOffset;
-    pBufferData rxCount;
+    uint32_t txOffset;
+    uint32_t txCount;
+    uint32_t rxOffset;
+    uint32_t rxCount;
 };
 
 constexpr size_t smallBlockSize = 2;
