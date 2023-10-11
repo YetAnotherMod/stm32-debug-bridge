@@ -491,7 +491,11 @@ void uartTxHandler() {
     if (!global::uartRx.empty()) {
         writeFromFifo(descriptor::EndpointIndex::uartData, global::uartRx);
     }else{
-        uartTxProcessing = false;
+        if ( bTable[static_cast<ptrdiff_t>(descriptor::EndpointIndex::uartData)].txCount != 0){
+            write(descriptor::EndpointIndex::uartData,nullptr,0);
+        }else{
+            uartTxProcessing = false;
+        }
     }
 }
 void uartInterruptHandler() { ; }
@@ -505,7 +509,11 @@ void shellTxHandler() {
     if (!global::shellRx.empty()) {
         writeFromFifo(descriptor::EndpointIndex::shellData, global::shellRx);
     }else{
-        shellTxProcessing = false;
+        if ( bTable[static_cast<ptrdiff_t>(descriptor::EndpointIndex::shellData)].txCount != 0){
+            write(descriptor::EndpointIndex::shellData,nullptr,0);
+        }else{
+            shellTxProcessing = false;
+        }
     }
 }
 void shellInterruptHandler() { ; }
@@ -519,7 +527,11 @@ void jtagTxHandler() {
     if (!global::jtagRx.empty()) {
         writeFromFifo(descriptor::EndpointIndex::jtagData, global::jtagRx);
     }else{
-        jtagTxProcessing = false;
+        if ( bTable[static_cast<ptrdiff_t>(descriptor::EndpointIndex::jtagData)].txCount != 0){
+            write(descriptor::EndpointIndex::jtagData,nullptr,0);
+        }else{
+            jtagTxProcessing = false;
+        }
     }
 }
 void jtagInterruptHandler() { ; }
