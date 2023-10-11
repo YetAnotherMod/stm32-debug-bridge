@@ -6,6 +6,9 @@
 #include <systick-wait.h>
 #include <usb.h>
 
+extern uint8_t sram_base[];
+extern uint32_t sram_bb_alias[];
+
 namespace jtag {
 class Executor{
 private:
@@ -67,9 +70,10 @@ public:
         scan<false,true>(count,buffer);
     }
     void execute_move(uint16_t count, uint8_t* buffer){
+        volatile uint32_t *r = &sram_bb_alias[((buffer-sram_base)*8)];
         systickWaitInit<true>(timing);
         for ( uint32_t i = 0 ; i < count ; i++ ){
-            bool tms = (buffer[i/8]&(1<<(i%8)))?true:false;
+            bool tms = *r++;
             systickWaitUntil([](){return true;},[](){});
             global::jtagOut.write(false, tms, false);
             systickWaitUntil([](){return true;},[](){});
@@ -91,7 +95,9 @@ public:
         global::jtagOut.write<2>(false);
         systickWaitFinalize();
     }
-    void execute_waitTime([[maybe_unused]] uint16_t count){}
+    void execute_waitTime([[maybe_unused]] uint16_t count){
+        systickWait(static_cast<uint32_t>(count)*1000,[](){return true;},[](){});
+    }
     void execute_setSpeed([[maybe_unused]] uint16_t count){
         timing = count*10;
     }
@@ -105,24 +111,27 @@ public:
     }
     template <bool read, bool write>
     void scan(uint16_t count, uint8_t* buffer){
-        uint8_t r = 0;
+        volatile uint32_t *r = &sram_bb_alias[((buffer-sram_base)*8)];
         systickWaitInit<true>(timing);
-        for ( uint32_t i = 0 ; i < count ; i++ ){
-            if ( ( i%8 == 0 ) && ( i/8 > 0 ) ){
-                buffer[i/8-1] = r;
-                if (read)
-                    r=0;
-            }
-            bool tdi = write?(buffer[i/8]&(1<<(i%8)))?true:false:false;
-            bool tms = (i==count-1u);
+        for ( uint32_t i = 1 ; i < count ; i++ ){
+            bool tdi = write?*r:false;
             systickWaitUntil([](){return true;},[](){});
-            global::jtagOut.write(tdi,tms,false);
+            global::jtagOut.write(tdi,false,false);
             systickWaitUntil([](){return true;},[](){});
             global::jtagOut.write<2>(true);
             if (read)
-                r |= global::jtagIn.read()?1<<i%8:0;
+                *r = global::jtagIn.read();
+            r++;
         }
-        buffer[(count-1)/8] = r;
+        {
+            bool tdi = write?*r:false;
+            systickWaitUntil([](){return true;},[](){});
+            global::jtagOut.write(tdi,true,false);
+            systickWaitUntil([](){return true;},[](){});
+            global::jtagOut.write<2>(true);
+            if (read)
+                *r = global::jtagIn.read();
+        }
         systickWaitUntil([](){return true;},[](){});
         global::jtagOut.write(false,false,false);
         systickWaitUntil([](){return true;},[](){});
